@@ -17,7 +17,9 @@ from gen.providers.base import FaceEmbeddingProvider, ImageProvider, LLMProvider
 
 PROMPTS_DIR = Path(__file__).resolve().parents[4] / "prompts"
 
-QC_SIMILARITY_THRESHOLD = 0.5
+# См. gen.graph.generate.nodes.QC_SIMILARITY_THRESHOLD — то же калибровочное
+# обоснование (InsightFace buffalo_l, реальные генерации RouterAI 27.09.2026).
+QC_SIMILARITY_THRESHOLD = 0.75
 
 
 @dataclass

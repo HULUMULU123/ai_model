@@ -20,7 +20,12 @@ from gen.qc.compliance import ComplianceProvider
 
 PROMPTS_DIR = Path(__file__).resolve().parents[4] / "prompts"
 
-QC_SIMILARITY_THRESHOLD = 0.5
+# Калибровано вживую на InsightFace (buffalo_l) + реальных генерациях RouterAI
+# 27.09.2026: одно и то же лицо на разных позах ~0.88, разные люди ~0.66,
+# идентичное изображение 1.0. Порог 0.75 отсекает разных людей с запасом, не
+# отбрасывая консистентные генерации по референсу. Пересмотреть при смене
+# модели эмбеддингов или после накопления больше статистики.
+QC_SIMILARITY_THRESHOLD = 0.75
 DEFAULT_ASPECT = "4:5"
 VIDEO_QC_FRAMES = 2
 
