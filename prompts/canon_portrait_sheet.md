@@ -1,14 +1,16 @@
-Character reference sheet of the same woman, {name}. One row of multiple
-close-up portrait angles on a plain light-grey studio background, same scale
-and lighting: front view, three-quarter left, left profile, three-quarter
-right, right profile. Neutral calm expression, hair pulled back so the face
-shape and hairline are visible.
+Head and shoulders reference sheet of the same woman, {name}, five portraits
+in one row on a plain light-grey background, same scale and lighting: front,
+three-quarter left, left profile, three-quarter right, right profile. Neutral
+expression, hair pulled back so the face shape, ears and hairline are
+visible.
 
-Appearance: {appearance}
+Keep exactly: {appearance}
 
 Signature details, keep in every panel: {signature_details}
 
-Soft diffused daylight, photorealistic, visible natural skin texture, no
-makeup look, no text, no watermark.
+Candid phone photo look, 35mm film grain, soft diffused daylight,
+photorealistic, visible pores and natural skin texture, no makeup look, no
+text, no watermark.
 
-Avoid: {forbidden}
+Avoid: illustration, cartoon, anime, 3d render, cgi, doll-like face,
+airbrushed skin, over-smoothed skin, plastic skin, waxy skin, {forbidden}

@@ -10,7 +10,12 @@ write_character:
   fallback: deepseek/deepseek-v4-pro-0813
 
 photo:
-  default: bytedance-seed/seedream-4.5
+  # seedream-4.5 давал мультяшный/пластиковый результат с артефактами —
+  # заменено на gpt-image-2 (проверено вживую 27.09.2026: фотореалистично,
+  # держит консистентность лица через input_references). Тот же контракт
+  # эндпоинта (POST /images/generations, input_references), смена модели
+  # не потребовала правок адаптера.
+  default: openai/gpt-image-2
   quality: black-forest-labs/flux.2-pro
 
 video:

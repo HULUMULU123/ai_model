@@ -17,6 +17,22 @@ def test_persona_context_loads_from_fixture():
     assert all(p.is_file() for p in ctx.canon_images)
 
 
+def test_bible_section_extracts_only_that_heading():
+    ctx = PersonaContext.load(FIXTURE_PERSONA_DIR)
+
+    appearance = ctx.bible_section("Внешность")
+
+    assert "freckles" in appearance
+    assert "## " not in appearance
+    assert "Short phrases" not in appearance  # раздел "Голос" не должен попасть
+
+
+def test_bible_section_missing_heading_returns_empty_string():
+    ctx = PersonaContext.load(FIXTURE_PERSONA_DIR)
+
+    assert ctx.bible_section("Несуществующий раздел") == ""
+
+
 def test_persona_context_missing_dir_raises(tmp_path):
     with pytest.raises(PersonaContextError):
         PersonaContext.load(tmp_path / "does-not-exist")

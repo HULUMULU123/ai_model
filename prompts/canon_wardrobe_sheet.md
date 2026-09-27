@@ -1,15 +1,17 @@
-Outfit reference sheet of the same woman, {name}. Multiple full-body views in
-one row on a plain light-grey background, same pose (standing, three-quarter
-view), same scale, same face and hair.
+Outfit reference sheet of the same woman, {name}, full-body views in one row
+on a plain light-grey studio background, same pose (standing, three-quarter
+view), same scale, same face and hair in every panel.
 
-Appearance: {appearance}
+Keep exactly: {appearance}
 
 Signature details, keep in every panel: {signature_details}
 
-Outfits, one per panel: {wardrobe_items}
+Outfits, one per panel, left to right: {wardrobe_items}
 
 Palette: {palette}
 
-Photorealistic, natural fabrics with wrinkles, no other text, no watermark.
+Candid phone photo look, 35mm film grain, photorealistic, natural fabrics
+with visible wrinkles and texture, no other text, no watermark.
 
-Avoid: {forbidden}
+Avoid: illustration, cartoon, anime, 3d render, cgi, doll-like face,
+airbrushed skin, over-smoothed skin, plastic skin, waxy skin, {forbidden}

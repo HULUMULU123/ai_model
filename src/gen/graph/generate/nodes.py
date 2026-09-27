@@ -55,8 +55,13 @@ def build_prompt(state: GenerateState, deps: NodeDeps) -> dict:
     wardrobe_text = "; ".join(
         f"{situation}: {', '.join(items)}" for situation, items in persona_ctx.wardrobe.items()
     )
+    signature_details = persona_ctx.bible_section("Сигнатурные детали") or ""
+    forbidden = persona_ctx.bible_section("Чего не делать") or ""
     prompt = template.format(
-        bible_text=persona_ctx.bible_text,
+        name=persona_ctx.name,
+        appearance=persona_ctx.bible_section("Внешность") or persona_ctx.bible_text,
+        signature_details=signature_details,
+        forbidden=forbidden,
         wardrobe_text=wardrobe_text,
         scene_brief=state["scene_brief"],
     )

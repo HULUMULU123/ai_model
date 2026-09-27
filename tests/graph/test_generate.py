@@ -171,5 +171,10 @@ def test_build_prompt_contains_bible_and_wardrobe(persona_ctx):
     )
 
     assert "Mila Novak" in result["prompt"]
+    assert "freckles" in result["prompt"]
     assert "серая толстовка" in result["prompt"]
     assert "сцена в кафе" in result["prompt"]
+    # Промпт для генерации изображения не должен тащить всю биографию/голос —
+    # только визуально релевантные разделы bible.md.
+    assert "Short phrases" not in result["prompt"]
+    assert "Grew up in Split" not in result["prompt"]

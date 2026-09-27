@@ -91,3 +91,20 @@ class PersonaContext(BaseModel):
             wardrobe=wardrobe,
             canon_images=canon_images,
         )
+
+    def bible_section(self, heading: str) -> str:
+        """Текст одного `## <heading>` раздела `bible.md` (до следующего `## `).
+
+        Нужно, чтобы промпты для генерации изображений содержали только
+        визуально релевантные разделы (внешность, детали, запреты), а не всю
+        библию целиком с биографией и голосом — это раздувает промпт и
+        уводит модель от портрета.
+        """
+        marker = f"## {heading}"
+        start = self.bible_text.find(marker)
+        if start == -1:
+            return ""
+        start += len(marker)
+        end = self.bible_text.find("\n## ", start)
+        section = self.bible_text[start : end if end != -1 else None]
+        return section.strip()
