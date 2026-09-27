@@ -15,10 +15,10 @@ def test_generate_help():
     assert "brief" in result.output.lower()
 
 
-def test_init_persona_not_implemented_yet():
+def test_init_persona_requires_name():
     result = CliRunner().invoke(init_persona, [])
     assert result.exit_code != 0
-    assert isinstance(result.exception, NotImplementedError)
+    assert "--name" in result.output
 
 
 def test_generate_not_implemented_yet():

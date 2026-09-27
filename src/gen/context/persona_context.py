@@ -32,6 +32,7 @@ class PersonaBible(BaseModel):
     personality: str
     backstory: str
     voice: str
+    wardrobe: dict[str, list[str]] = Field(default_factory=dict)
     palette: list[str] = Field(default_factory=list)
     forbidden: list[str] = Field(default_factory=list)
 

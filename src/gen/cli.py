@@ -1,12 +1,15 @@
 """Точки входа CLI: init-persona и generate.
 
-M0: только каркас команд и их опций. Реальная логика графов (init_persona,
-generate) появится на этапах M2-M5.
+generate: каркас команды, реальная логика графа появится на этапах M3-M5.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
+
+DEFAULT_PERSONA_DIR = Path("persona")
 
 
 @click.command()
@@ -27,7 +30,28 @@ import click
 )
 def init_persona(brief: str | None, name: str | None, full_reference_set: bool, variants: int) -> None:
     """Подготовить характер и эталонную внешность персонажа за один проход."""
-    raise NotImplementedError("init-persona: граф init_persona будет реализован на этапе M2")
+    from gen.graph.init_persona.run import run_init_persona
+
+    if not name:
+        raise click.UsageError("--name обязателен")
+
+    brief_text = ""
+    if brief:
+        brief_path = Path(brief)
+        brief_text = brief_path.read_text(encoding="utf-8") if brief_path.is_file() else brief
+
+    result = run_init_persona(
+        brief=brief_text,
+        name=name,
+        persona_dir=DEFAULT_PERSONA_DIR,
+        variants=variants,
+        full_reference_set=full_reference_set,
+    )
+
+    click.echo(f"Готово: {DEFAULT_PERSONA_DIR}/bible.md, persona.yaml, wardrobe.yaml")
+    click.echo(f"Референсы: {len(result['canon_images'])} файлов в {DEFAULT_PERSONA_DIR}/canon/")
+    if result.get("qc_warning"):
+        click.echo(f"QC предупреждение: {result['qc_warning']}")
 
 
 @click.command()
