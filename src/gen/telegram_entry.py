@@ -13,8 +13,11 @@ https://core.telegram.org/bots/api#getupdates), процесс работает,
   - `voice: <текст>` (или `озвучь:`) → озвучка текста голосом персонажа
     (не входит в исходное ТЗ — добавлено отдельно, см. `src/gen/voice.py`)
   - `/start` или `/help` → инлайн-клавиатура с краткими подсказками по каждой
-    команде (нажатие кнопки не запускает генерацию — только показывает
-    инструкцию, чтобы не путаться в форматах)
+    команде (нажатие кнопки-подсказки не запускает генерацию — только
+    показывает инструкцию); отдельная кнопка «🆕 Инициализировать персонажа»
+    запускает `init-persona` по `persona/brief.md` (ровно 1 LLM-вызов + 2
+    генерации изображений, как и из CLI, см. ТЗ §5) — единственная кнопка,
+    которая реально что-то генерирует по нажатию
 
 Пока `TELEGRAM_CHAT_ID` не задан в `.env`, бот ничего не генерирует — только
 печатает в консоль chat_id первого написавшего, чтобы владелец мог его
@@ -23,6 +26,8 @@ https://core.telegram.org/bots/api#getupdates), процесс работает,
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import httpx
 
@@ -44,6 +49,13 @@ TELEGRAM_API_BASE = "https://api.telegram.org"
 POLL_TIMEOUT_SECONDS = 30
 VIDEO_PREFIXES = ("video:", "видео:")
 VOICE_PREFIXES = ("voice:", "озвучь:")
+
+# Инструмент — на один персонажа (ТЗ §1.2 "Персонажей: 1"), поэтому имя и
+# путь к брифу фиксированы, а не выводятся из сообщения.
+PERSONA_NAME = "Mila Novak"
+PERSONA_BRIEF_PATH = Path("persona/brief.md")
+PERSONA_DIR = Path("persona")
+INIT_PERSONA_CALLBACK_DATA = "action_init_persona"
 
 WELCOME_TEXT = (
     "Привет! Я генерирую фото и видео персонажа по твоему брифу. "
@@ -107,11 +119,54 @@ def parse_message(text: str) -> tuple[str, str]:
 
 def _send_help_keyboard(*, bot_token: str, chat_id: str) -> None:
     buttons = [(label, data) for data, label, _ in HELP_BUTTONS]
+    buttons.append(("🆕 Инициализировать персонажа", INIT_PERSONA_CALLBACK_DATA))
     send_message(WELCOME_TEXT, bot_token=bot_token, chat_id=chat_id, buttons=buttons)
+
+
+def _handle_init_persona_action(*, bot_token: str, chat_id: str) -> None:
+    from gen.graph.init_persona.run import run_init_persona
+
+    if not PERSONA_BRIEF_PATH.is_file():
+        send_message(
+            f"Не найден {PERSONA_BRIEF_PATH} — сначала положи туда бриф персонажа.",
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return
+
+    send_message(
+        f"Инициализирую персонажа «{PERSONA_NAME}» из {PERSONA_BRIEF_PATH} "
+        "(1 LLM-вызов + 2 генерации изображений)...",
+        bot_token=bot_token,
+        chat_id=chat_id,
+    )
+    try:
+        result = run_init_persona(
+            brief=PERSONA_BRIEF_PATH.read_text(encoding="utf-8"),
+            name=PERSONA_NAME,
+            persona_dir=PERSONA_DIR,
+        )
+    except Exception as exc:  # noqa: BLE001 - показать причину владельцу, не падать молча
+        send_message(f"Ошибка инициализации: {exc}", bot_token=bot_token, chat_id=chat_id)
+        return
+
+    send_message(
+        f"Готово: {PERSONA_DIR}/bible.md, persona.yaml, wardrobe.yaml, "
+        f"{len(result['canon_images'])} файлов в {PERSONA_DIR}/canon/.",
+        bot_token=bot_token,
+        chat_id=chat_id,
+    )
+    if result.get("qc_warning"):
+        send_message(f"QC предупреждение: {result['qc_warning']}", bot_token=bot_token, chat_id=chat_id)
 
 
 def _handle_callback_query(*, bot_token: str, chat_id: str, callback_query_id: str, data: str) -> None:
     answer_callback_query(callback_query_id, bot_token=bot_token)
+
+    if data == INIT_PERSONA_CALLBACK_DATA:
+        _handle_init_persona_action(bot_token=bot_token, chat_id=chat_id)
+        return
+
     instruction = next((text for key, _, text in HELP_BUTTONS if key == data), None)
     if instruction is None:
         return

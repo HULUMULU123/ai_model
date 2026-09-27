@@ -5,6 +5,7 @@ import respx
 
 from gen.telegram_entry import (
     HELP_BUTTONS,
+    INIT_PERSONA_CALLBACK_DATA,
     _handle_callback_query,
     _send_help_keyboard,
     parse_message,
@@ -65,6 +66,7 @@ def test_send_help_keyboard_includes_all_buttons():
     body = route.calls[0].request.content
     for _, label, _ in HELP_BUTTONS:
         assert label.encode() in body
+    assert INIT_PERSONA_CALLBACK_DATA.encode() in body
 
 
 @respx.mock
@@ -102,3 +104,65 @@ def test_handle_callback_query_unknown_data_only_answers():
 
     assert answer_route.called
     assert not message_route.called
+
+
+@respx.mock
+def test_handle_callback_query_init_persona_success(tmp_path, monkeypatch):
+    from gen import telegram_entry
+
+    brief_path = tmp_path / "brief.md"
+    brief_path.write_text("тестовый бриф", encoding="utf-8")
+    monkeypatch.setattr(telegram_entry, "PERSONA_BRIEF_PATH", brief_path)
+    monkeypatch.setattr(telegram_entry, "PERSONA_DIR", tmp_path / "persona")
+
+    def fake_run_init_persona(*, brief, name, persona_dir):
+        assert brief == "тестовый бриф"
+        assert name == telegram_entry.PERSONA_NAME
+        return {"canon_images": [tmp_path / "canon-00.png"], "qc_warning": None}
+
+    import gen.graph.init_persona.run as init_persona_run
+
+    monkeypatch.setattr(init_persona_run, "run_init_persona", fake_run_init_persona)
+
+    answer_route = respx.post(
+        "https://api.telegram.org/bot123:abc/answerCallbackQuery"
+    ).mock(return_value=httpx.Response(200, json={"ok": True, "result": True}))
+    message_route = respx.post("https://api.telegram.org/bot123:abc/sendMessage").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+
+    _handle_callback_query(
+        bot_token="123:abc",
+        chat_id="42",
+        callback_query_id="cbq1",
+        data=INIT_PERSONA_CALLBACK_DATA,
+    )
+
+    assert answer_route.called
+    assert message_route.call_count >= 2  # "инициализирую..." + "готово"
+
+
+@respx.mock
+def test_handle_callback_query_init_persona_missing_brief(tmp_path, monkeypatch):
+    from gen import telegram_entry
+
+    monkeypatch.setattr(telegram_entry, "PERSONA_BRIEF_PATH", tmp_path / "no-brief.md")
+
+    answer_route = respx.post(
+        "https://api.telegram.org/bot123:abc/answerCallbackQuery"
+    ).mock(return_value=httpx.Response(200, json={"ok": True, "result": True}))
+    message_route = respx.post("https://api.telegram.org/bot123:abc/sendMessage").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+
+    _handle_callback_query(
+        bot_token="123:abc",
+        chat_id="42",
+        callback_query_id="cbq1",
+        data=INIT_PERSONA_CALLBACK_DATA,
+    )
+
+    assert answer_route.called
+    assert message_route.call_count == 1
+    sent_body = json.loads(message_route.calls[0].request.content)
+    assert "brief" in sent_body["text"].lower() or "не найден" in sent_body["text"].lower()
