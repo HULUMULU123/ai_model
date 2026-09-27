@@ -1,4 +1,14 @@
-from gen.telegram_entry import parse_message
+import json
+
+import httpx
+import respx
+
+from gen.telegram_entry import (
+    HELP_BUTTONS,
+    _handle_callback_query,
+    _send_help_keyboard,
+    parse_message,
+)
 
 
 def test_parse_message_plain_text_is_photo():
@@ -27,3 +37,54 @@ def test_parse_message_strips_whitespace():
 
     assert format_ == "photo"
     assert brief == "сцена на пляже"
+
+
+@respx.mock
+def test_send_help_keyboard_includes_all_buttons():
+    route = respx.post("https://api.telegram.org/bot123:abc/sendMessage").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+
+    _send_help_keyboard(bot_token="123:abc", chat_id="42")
+
+    assert route.called
+    body = route.calls[0].request.content
+    for _, label, _ in HELP_BUTTONS:
+        assert label.encode() in body
+
+
+@respx.mock
+def test_handle_callback_query_answers_and_sends_instruction():
+    answer_route = respx.post(
+        "https://api.telegram.org/bot123:abc/answerCallbackQuery"
+    ).mock(return_value=httpx.Response(200, json={"ok": True, "result": True}))
+    message_route = respx.post("https://api.telegram.org/bot123:abc/sendMessage").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+
+    _handle_callback_query(
+        bot_token="123:abc", chat_id="42", callback_query_id="cbq1", data="help_photo"
+    )
+
+    assert answer_route.called
+    assert message_route.called
+    sent_body = json.loads(message_route.calls[0].request.content)
+    expected_text = next(text for key, _, text in HELP_BUTTONS if key == "help_photo")
+    assert sent_body["text"] == expected_text
+
+
+@respx.mock
+def test_handle_callback_query_unknown_data_only_answers():
+    answer_route = respx.post(
+        "https://api.telegram.org/bot123:abc/answerCallbackQuery"
+    ).mock(return_value=httpx.Response(200, json={"ok": True, "result": True}))
+    message_route = respx.post("https://api.telegram.org/bot123:abc/sendMessage").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+
+    _handle_callback_query(
+        bot_token="123:abc", chat_id="42", callback_query_id="cbq1", data="unknown"
+    )
+
+    assert answer_route.called
+    assert not message_route.called

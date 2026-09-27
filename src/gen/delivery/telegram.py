@@ -62,11 +62,45 @@ def send_video(path: Path, *, bot_token: str, chat_id: str, caption: str = "") -
     )
 
 
-def send_message(text: str, *, bot_token: str, chat_id: str) -> None:
+def send_message(
+    text: str,
+    *,
+    bot_token: str,
+    chat_id: str,
+    buttons: list[tuple[str, str]] | None = None,
+) -> None:
+    """Отправляет текст, опционально с инлайн-клавиатурой.
+
+    `buttons` — список (подпись, callback_data) для `InlineKeyboardMarkup`
+    (https://core.telegram.org/bots/api#inlinekeyboardmarkup), одна кнопка на
+    строку — удобно листать с телефона.
+    """
     url = f"{TELEGRAM_API_BASE}/bot{bot_token}/sendMessage"
-    response = httpx.post(
-        url, json={"chat_id": chat_id, "text": text}, timeout=REQUEST_TIMEOUT_SECONDS
-    )
+    payload_body: dict = {"chat_id": chat_id, "text": text}
+    if buttons:
+        payload_body["reply_markup"] = {
+            "inline_keyboard": [[{"text": label, "callback_data": data}] for label, data in buttons]
+        }
+    response = httpx.post(url, json=payload_body, timeout=REQUEST_TIMEOUT_SECONDS)
     payload = response.json()
     if not payload.get("ok"):
         raise TelegramDeliveryError(f"Telegram Bot API sendMessage отклонил запрос: {payload}")
+
+
+def answer_callback_query(callback_query_id: str, *, bot_token: str, text: str = "") -> None:
+    """Подтверждает нажатие инлайн-кнопки (https://core.telegram.org/bots/api#answercallbackquery).
+
+    Обязательно вызывать на каждый `callback_query` — иначе Telegram
+    показывает у кнопки бесконечный "часики" в клиенте пользователя.
+    """
+    url = f"{TELEGRAM_API_BASE}/bot{bot_token}/answerCallbackQuery"
+    response = httpx.post(
+        url,
+        json={"callback_query_id": callback_query_id, "text": text},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    payload = response.json()
+    if not payload.get("ok"):
+        raise TelegramDeliveryError(
+            f"Telegram Bot API answerCallbackQuery отклонил запрос: {payload}"
+        )
