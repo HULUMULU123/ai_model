@@ -16,7 +16,16 @@ cp .env.example .env  # заполнить ключи провайдеров
 ```
 uv run init-persona --help
 uv run generate --help
+uv run telegram-bot
 ```
+
+`telegram-bot` — личный Telegram-бот (вариант B, ТЗ §6): пишешь боту сцену
+текстом → присылает фото (9:16) в личку; префикс `video:`/`видео:` → видео.
+`/start`/`/help` — инлайн-клавиатура с подсказками по формату. Требует
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` в `.env` (см. `.env.example` и раздел
+«Telegram-бот» ниже — как узнать свой `chat_id` при первом запуске). Процесс
+работает, пока не остановишь (`Ctrl+C`) — это не фоновый воркер, просто ещё
+одна точка входа в тот же граф `generate`.
 
 ## Тесты
 
