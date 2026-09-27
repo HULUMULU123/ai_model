@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 
 from gen.cli import generate, init_persona
+from gen.context.persona_context import PersonaContextError
 
 
 def test_init_persona_help():
@@ -21,7 +22,8 @@ def test_init_persona_requires_name():
     assert "--name" in result.output
 
 
-def test_generate_not_implemented_yet():
+def test_generate_without_persona_fails_clearly(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     result = CliRunner().invoke(generate, ["--brief", "тестовая сцена"])
     assert result.exit_code != 0
-    assert isinstance(result.exception, NotImplementedError)
+    assert isinstance(result.exception, PersonaContextError)

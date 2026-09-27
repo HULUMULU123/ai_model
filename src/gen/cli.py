@@ -1,6 +1,6 @@
 """Точки входа CLI: init-persona и generate.
 
-generate: каркас команды, реальная логика графа появится на этапах M3-M5.
+generate: фото — граф реализован (M3); видео появится на M5.
 """
 
 from __future__ import annotations
@@ -74,7 +74,21 @@ def init_persona(brief: str | None, name: str | None, full_reference_set: bool, 
 )
 def generate(brief: str, format_: str, n: int, retries: int) -> None:
     """Сгенерировать фото или видео персонажа по брифу на кадр."""
-    raise NotImplementedError("generate: граф generate будет реализован на этапах M3-M5")
+    from gen.graph.generate.run import run_generate
+
+    result = run_generate(
+        scene_brief=brief,
+        format_=format_,
+        n=n,
+        retries=retries,
+        persona_dir=DEFAULT_PERSONA_DIR,
+    )
+
+    candidate = result.get("best_candidate", result.get("candidate"))
+    click.echo(f"Готово: {candidate}")
+    click.echo(f"QC score: {result.get('best_score', result.get('qc_score')):.2f}")
+    if result.get("low_confidence"):
+        click.echo("Внимание: low-confidence — сходство лица ниже порога после всех ретраев")
 
 
 if __name__ == "__main__":

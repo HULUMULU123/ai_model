@@ -31,7 +31,7 @@ uv run pytest
 | M0. Каркас | ✅ готово — CLI-заглушки (`--help`), конфиг, логирование, ошибки |
 | M1. Провайдеры и PersonaContext | ✅ готово — интерфейсы + моки + `PersonaContext.load` |
 | M2. Команда init | ✅ готово — граф `init_persona` на моках, 1 LLM + 2 image-вызова по умолчанию |
-| M3. Фото-генерация | не начато |
+| M3. Фото-генерация | ✅ готово — граф `generate` на моках, 1 генерация + макс. 1 ретрай по умолчанию |
 | M4. Пост-обработка и доставка (фото) | не начато |
 | M5. Видео-генерация | не начато |
 
@@ -82,3 +82,28 @@ uv run pytest
 - Тест на счётчик вызовов: `tests/graph/test_init_persona.py::test_init_persona_default_call_counts`.
 
 Проверить руками (без сети, на моках): `uv run pytest tests/graph/test_init_persona.py -v`.
+
+### M3: фото-генерация
+
+- Граф `generate`: `build_prompt` → `generate_one` → `qc_one` → (retry ≤ 1 раз
+  по умолчанию, флаг `--retries`) → `finalize_accepted` / `finalize_low_confidence`.
+- `build_prompt` — код-гард из ТЗ §4: без `PersonaContext` кидает
+  `MissingPersonaContextError`; промпт собирается из `prompts/generate_photo.md`
+  + `bible.md` + `wardrobe.yaml` + брифа сцены, без LLM.
+- `uv run generate --brief "сцена в кафе, повседневный образ"` — 1 генерация +
+  максимум 1 повтор при провале QC (embedding-сходство с canon-референсом),
+  `--n`/`--retries` только явно расширяют расход.
+- `--n > 1` и `--format video` пока не реализованы — явный `NotImplementedError`,
+  не тихая заглушка (веер кандидатов и видео не входят в дефолт M3 по ТЗ).
+- Реальный `ImageProvider` (RouterAI) — всё ещё заглушка `NotImplementedError`
+  из M1: сеть на `routerai.ru` в этом окружении сейчас заблокирована политикой
+  сети (403 от прокси), поэтому формат ответа медиа-эндпоинта не подтверждён
+  документацией и не проверен вживую. Как только сеть откроют — доделаю
+  адаптер и проверю LLM- и image-вызовы по-настоящему.
+- Тесты на экономию: `tests/graph/test_generate.py` —
+  `test_generate_accepts_on_first_try_without_retry` (1 генерация),
+  `test_generate_retries_exactly_once_by_default` (ровно 2 генерации при
+  провале QC на первой попытке), `test_generate_escalates_to_low_confidence_after_retry_limit`
+  (не больше 2 генераций, даже если QC не проходит снова).
+
+Проверить руками (без сети, на моках): `uv run pytest tests/graph/test_generate.py -v`.
