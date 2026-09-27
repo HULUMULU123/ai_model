@@ -24,9 +24,13 @@ Invalid JSON format`, то есть эндпоинт ждёт обычный JSO
 "https://routerai.ru/api/v1/videos/gen-vid-...", "status": "pending"}`.
 Значит: (1) статус `pending` — тоже "ещё не готово", не ошибка; (2) есть
 готовый `polling_url`, которым и нужно опрашивать вместо самостоятельной
-сборки `/videos/{id}` (используем его, если он есть в ответе). Финальная
-форма ответа при `status: "completed"` (имя поля с URL результата) всё ещё
-не подтверждена — до этого статуса реальный прогон пока не дошёл.
+сборки `/videos/{id}` (используем его, если он есть в ответе).
+
+**Подтверждено 27.09.2026 на реальном `status: "completed"`:** ответ —
+`{"id": ..., "polling_url": ..., "status": "completed", "unsigned_urls":
+["https://.../videos/{id}/content?index=0"], "usage": {"cost": ...}}` —
+поле с URL результата называется `unsigned_urls` (список), не `video_url`
+и не `url`; берём первый элемент.
 
 **Модель по умолчанию сменена на `alibaba/wan-3.0` (было `wan-2.6`, по
 прямому запросу). НЕ ПОДТВЕРЖДЕНО реальным запросом** (в отличие от
@@ -165,7 +169,13 @@ class RouterAIVideoProvider(VideoProvider):
                     )
                 await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
-            video_url = job.get("video_url") or job.get("url") or job.get("output", {}).get("url")
+            unsigned_urls = job.get("unsigned_urls") or job.get("urls")
+            video_url = (
+                job.get("video_url")
+                or job.get("url")
+                or (job.get("output") or {}).get("url")
+                or (unsigned_urls[0] if unsigned_urls else None)
+            )
             if not video_url:
                 raise ProviderError(
                     f"RouterAI videos API: не найдено поле с URL результата в {job!r}"

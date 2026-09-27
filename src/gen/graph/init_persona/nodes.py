@@ -34,7 +34,7 @@ class NodeDeps:
 def write_character(state: InitPersonaState, deps: NodeDeps) -> dict:
     template = (deps.prompts_dir / "init_character.md").read_text(encoding="utf-8")
     prompt = template.format(name=state["name"], brief=state.get("brief", ""))
-    bible = deps.llm.generate_structured(prompt, PersonaBible)
+    bible = deps.llm.generate_structured(prompt, PersonaBible, defaults={"name": state["name"]})
     return {"bible": bible, "wardrobe": bible.wardrobe}
 
 

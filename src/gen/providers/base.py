@@ -15,8 +15,14 @@ class LLMProvider(ABC):
     """LLM-провайдер с structured-output вызовами (без streaming/чатов)."""
 
     @abstractmethod
-    def generate_structured(self, prompt: str, schema: type[SchemaT]) -> SchemaT:
-        """Один вызов LLM, результат провалидирован по Pydantic-схеме `schema`."""
+    def generate_structured(
+        self, prompt: str, schema: type[SchemaT], *, defaults: dict | None = None
+    ) -> SchemaT:
+        """Один вызов LLM, результат провалидирован по Pydantic-схеме `schema`.
+
+        `defaults` — значения полей, уже известные вызывающей стороне (например,
+        имя персонажа из CLI/брифа): подставляются, если LLM не вернула поле.
+        """
 
 
 class ImageProvider(ABC):

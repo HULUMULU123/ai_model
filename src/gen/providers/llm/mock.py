@@ -12,13 +12,15 @@ class MockLLMProvider(LLMProvider):
         self._factory = factory
         self.calls: list[tuple[str, type]] = []
 
-    def generate_structured(self, prompt: str, schema: type[SchemaT]) -> SchemaT:
+    def generate_structured(
+        self, prompt: str, schema: type[SchemaT], *, defaults: dict | None = None
+    ) -> SchemaT:
         self.calls.append((prompt, schema))
         if self._factory is not None:
             result = self._factory(prompt, schema)
             assert isinstance(result, schema)
             return result
-        return schema.model_construct()
+        return schema.model_construct(**(defaults or {}))
 
     @property
     def call_count(self) -> int:
