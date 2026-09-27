@@ -72,7 +72,20 @@ def init_persona(brief: str | None, name: str | None, full_reference_set: bool, 
     show_default=True,
     help="Максимум повторов при провале QC.",
 )
-def generate(brief: str, format_: str, n: int, retries: int) -> None:
+@click.option(
+    "--quality",
+    is_flag=True,
+    default=False,
+    help="Использовать более дорогую модель более высокого качества (не по умолчанию).",
+)
+@click.option(
+    "--aspect",
+    type=click.Choice(["4:5", "9:16", "1:1"]),
+    default="4:5",
+    show_default=True,
+    help="Целевое соотношение сторон после кропа.",
+)
+def generate(brief: str, format_: str, n: int, retries: int, quality: bool, aspect: str) -> None:
     """Сгенерировать фото или видео персонажа по брифу на кадр."""
     from gen.graph.generate.run import run_generate
 
@@ -81,12 +94,17 @@ def generate(brief: str, format_: str, n: int, retries: int) -> None:
         format_=format_,
         n=n,
         retries=retries,
+        quality=quality,
+        aspect=aspect,
         persona_dir=DEFAULT_PERSONA_DIR,
     )
 
-    candidate = result.get("best_candidate", result.get("candidate"))
-    click.echo(f"Готово: {candidate}")
-    click.echo(f"QC score: {result.get('best_score', result.get('qc_score')):.2f}")
+    if not result.get("compliance_passed", False):
+        click.echo(f"Отклонено модерацией: {result.get('compliance_reason') or 'причина не указана'}")
+        return
+
+    click.echo(f"Готово: {result['delivered_path']}")
+    click.echo(f"QC score: {result['best_score']:.2f}")
     if result.get("low_confidence"):
         click.echo("Внимание: low-confidence — сходство лица ниже порога после всех ретраев")
 

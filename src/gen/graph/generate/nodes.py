@@ -7,12 +7,16 @@ from pathlib import Path
 
 from gen.context.persona_context import PersonaContext
 from gen.core.errors import ContentGenError
+from gen.delivery.local import deliver_to_output
 from gen.graph.generate.state import GenerateState
+from gen.postprocess.image import crop_to_aspect, upscale
 from gen.providers.base import FaceEmbeddingProvider, ImageProvider
+from gen.qc.compliance import ComplianceProvider
 
 PROMPTS_DIR = Path(__file__).resolve().parents[4] / "prompts"
 
 QC_SIMILARITY_THRESHOLD = 0.5
+DEFAULT_ASPECT = "4:5"
 
 
 class MissingPersonaContextError(ContentGenError):
@@ -23,7 +27,9 @@ class MissingPersonaContextError(ContentGenError):
 class NodeDeps:
     image_provider: ImageProvider
     face_embedding_provider: FaceEmbeddingProvider
+    compliance_provider: ComplianceProvider
     prompts_dir: Path = PROMPTS_DIR
+    output_root: Path = Path("output")
 
 
 def build_prompt(state: GenerateState, deps: NodeDeps) -> dict:
@@ -82,3 +88,35 @@ def finalize_low_confidence(state: GenerateState) -> dict:
 
 def finalize_accepted(state: GenerateState) -> dict:
     return {"low_confidence": False}
+
+
+def post_process(state: GenerateState) -> dict:
+    candidate = state["best_candidate"]
+    aspect = state.get("aspect") or DEFAULT_ASPECT
+    upscale(candidate)
+    crop_to_aspect(candidate, aspect)
+    return {}
+
+
+def compliance_check(state: GenerateState, deps: NodeDeps) -> dict:
+    result = deps.compliance_provider.check(state["best_candidate"])
+    return {"compliance_passed": result.passed, "compliance_reason": result.reason}
+
+
+def should_deliver(state: GenerateState) -> str:
+    return "deliver" if state["compliance_passed"] else "reject"
+
+
+def reject(state: GenerateState) -> dict:
+    return {}
+
+
+def deliver(state: GenerateState, deps: NodeDeps) -> dict:
+    dest = deliver_to_output(
+        state["best_candidate"],
+        prompt=state["prompt"],
+        qc_score=state["best_score"],
+        low_confidence=state["low_confidence"],
+        output_root=deps.output_root,
+    )
+    return {"delivered_path": dest}

@@ -1,0 +1,18 @@
+# Модели RouterAI по задачам. НЕ хардкодить ID моделей в коде (см. ТЗ §3.1) —
+# только читать отсюда. Проверено в каталоге routerai.ru/models на 27.09.2026,
+# ID и цены могут измениться — сверить перед реальным использованием.
+#
+# `--quality high` (там, где реализовано) переключает на *_quality вместо
+# *_draft/default — экономия по умолчанию, доплата только по явному флагу.
+
+write_character:
+  default: anthropic/claude-sonnet-5
+  fallback: deepseek/deepseek-v4-pro-0813
+
+photo:
+  default: bytedance-seed/seedream-4.5
+  quality: black-forest-labs/flux.2-pro
+
+video:
+  default: alibaba/wan-2.6
+  quality: bytedance/seedance-2.0

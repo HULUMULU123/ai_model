@@ -14,6 +14,8 @@ class GenerateState(TypedDict, total=False):
     persona_ctx: PersonaContext
     max_retries: int
 
+    aspect: str
+
     prompt: str
     attempts: int
     candidate: Path
@@ -21,3 +23,7 @@ class GenerateState(TypedDict, total=False):
     best_candidate: Path
     best_score: float
     low_confidence: bool
+
+    compliance_passed: bool
+    compliance_reason: str | None
+    delivered_path: Path

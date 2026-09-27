@@ -1,10 +1,19 @@
-"""Детерминированный мок ImageProvider для тестов (без сети, без реальных файлов-изображений)."""
+"""Детерминированный мок ImageProvider для тестов (без сети).
+
+Пишет настоящие маленькие PNG (через Pillow), а не байты-заглушки — это
+позволяет тестировать пост-обработку (апскейл/кроп) на реальных изображениях
+без сети.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from PIL import Image
+
 from gen.providers.base import ImageProvider
+
+MOCK_IMAGE_SIZE = (64, 96)
 
 
 class MockImageProvider(ImageProvider):
@@ -24,7 +33,7 @@ class MockImageProvider(ImageProvider):
         paths = []
         for i in range(n):
             path = self._output_dir / f"mock-image-{self.call_count}-{i}.png"
-            path.write_bytes(b"mock-image")
+            Image.new("RGB", MOCK_IMAGE_SIZE, color=(120, 140, 160)).save(path)
             paths.append(path)
         return paths
 

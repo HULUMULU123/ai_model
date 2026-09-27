@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 from gen.core.config import load_settings
+from gen.core.models_config import load_models_config, resolve_model
 from gen.graph.init_persona.graph import build_init_persona_graph
 from gen.graph.init_persona.nodes import NodeDeps
 from gen.graph.init_persona.state import InitPersonaState
@@ -28,17 +29,18 @@ def run_init_persona(
         )
 
     settings = load_settings()
+    models_config = load_models_config()
 
     deps = NodeDeps(
         llm=RouterAILLMProvider(
             api_key=settings.routerai_api_key,
             base_url=settings.routerai_base_url,
-            model="gpt-4o-mini",
+            model=resolve_model(models_config, "write_character"),
         ),
         image_provider=RouterAIImageProvider(
             api_key=settings.routerai_api_key,
             base_url=settings.routerai_base_url,
-            model="default",
+            model=resolve_model(models_config, "photo"),
         ),
         face_embedding_provider=InsightFaceEmbeddingProvider(),
         persona_dir=persona_dir,

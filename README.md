@@ -32,7 +32,7 @@ uv run pytest
 | M1. Провайдеры и PersonaContext | ✅ готово — интерфейсы + моки + `PersonaContext.load` |
 | M2. Команда init | ✅ готово — граф `init_persona` на моках, 1 LLM + 2 image-вызова по умолчанию |
 | M3. Фото-генерация | ✅ готово — граф `generate` на моках, 1 генерация + макс. 1 ретрай по умолчанию |
-| M4. Пост-обработка и доставка (фото) | не начато |
+| M4. Пост-обработка и доставка (фото) | ✅ готово — апскейл/кроп, compliance-развилка, доставка в `output/<timestamp>/` |
 | M5. Видео-генерация | не начато |
 
 На M0 команды `init-persona` и `generate` только парсят аргументы и печатают
@@ -107,3 +107,61 @@ uv run pytest
   (не больше 2 генераций, даже если QC не проходит снова).
 
 Проверить руками (без сети, на моках): `uv run pytest tests/graph/test_generate.py -v`.
+
+### Правка после ТЗ v4.0 (§3.1): модели теперь только из конфига
+
+ТЗ обновилось (v4.0, приложен лор персонажа + раздел 3.1 с конкретными ID
+моделей RouterAI) и явно требует: выбор модели — только через
+`persona.yaml`/`models.yaml`, никогда хардкодом в коде. До этой правки
+`run.py` графов `init_persona`/`generate` хардкодили `model="gpt-4o-mini"` /
+`model="default"` — это было ошибкой ещё в M1-M3, исправлено сейчас:
+
+- `models.yaml` (корень репозитория) — какая модель на какую задачу
+  (`write_character`, `photo`, `video`), с тиром `default`/`quality`. ID и
+  цены — из таблицы ТЗ §3.1 на 27.09.2026, **не проверены** по актуальному
+  каталогу `routerai.ru/models` (сеть на этот хост заблокирована политикой
+  окружения) — использовать как отправную точку, не как гарантированно
+  рабочие ID.
+- `src/gen/core/models_config.py` — `load_models_config()`/`resolve_model()`,
+  путь настраивается через `MODELS_CONFIG_PATH`.
+- `run_init_persona`/`run_generate` теперь берут модель через
+  `resolve_model(config, "write_character")` / `resolve_model(config, "photo", tier=...)`.
+- `generate --quality` — явный флаг для тира `quality` (более дорогая модель),
+  по умолчанию `default` — соответствует принципу "расширение расхода только
+  по флагу".
+- Тест: `tests/unit/test_models_config.py`.
+
+### M4: пост-обработка и доставка (фото)
+
+- Граф `generate` расширен: `finalize_accepted`/`finalize_low_confidence` →
+  `post_process` (апскейл + кроп) → `compliance_check` → развилка
+  `deliver`/`reject`.
+- `src/gen/postprocess/image.py` — `upscale()` (Pillow LANCZOS-ресемплинг до
+  минимальной длинной стороны, по умолчанию 2048px) и `crop_to_aspect()`
+  (центр-кроп под `4:5`/`9:16`/`1:1`). **Ограничение:** это не нейросетевой
+  супер-резолюшн — такого апскейлера нет в стеке и он не подтверждён
+  документацией; честный ресемплинг вместо "выдуманного" API.
+- `src/gen/qc/compliance.py` — `ComplianceProvider` интерфейс +
+  `NotImplementedComplianceProvider` (реальной NSFW/age-модели с подтверждённой
+  документацией нет, как и для других внешних адаптеров) + мок
+  `MockComplianceProvider` для тестов. При отклонении — граф идёт в `reject`,
+  файл не доставляется, доп. попытки не делается (одноразовая проверка, не ретрай).
+- `src/gen/delivery/local.py` — `deliver_to_output()`: копирует финальный файл
+  в `output/<timestamp>/`, рядом кладёт `meta.json` (промпт, QC score,
+  low_confidence) — история как файлы, без БД (ТЗ §7).
+- `src/gen/delivery/telegram.py` — заглушка `NotImplementedError`; отправка в
+  личный Telegram (вариант B, ТЗ §6) отложена до реальной необходимости,
+  Bot API `sendPhoto` достаточно задокументирован, но не реализован в этой версии.
+- `uv run generate --brief "..." --aspect 1:1` — при успехе печатает путь к
+  файлу в `output/<timestamp>/`; при отклонении модерацией — печатает причину
+  и не пишет файл.
+- Тесты: `tests/unit/test_postprocess_image.py`, `tests/unit/test_compliance.py`,
+  `tests/unit/test_delivery_local.py`, плюс в `tests/graph/test_generate.py`:
+  `test_generate_delivers_upscaled_and_cropped_image`,
+  `test_generate_rejected_by_compliance_is_not_delivered` (файл не создаётся,
+  генерация не повторяется).
+- **Известные ограничения:** реальный `ComplianceProvider` — заглушка
+  (NSFW/модерационный эндпоинт не подтверждён документацией); апскейл —
+  ресемплинг, не ИИ-суперрезолюшн; для видео пост-обработка (ffmpeg) — M5.
+
+Проверить руками (без сети, на моках): `uv run pytest tests/graph/test_generate.py tests/unit/test_postprocess_image.py tests/unit/test_compliance.py tests/unit/test_delivery_local.py -v`.
