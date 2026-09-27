@@ -200,3 +200,55 @@ uv run pytest
 
 Проверить руками: `uv run pytest` (все тесты без сети; 2 теста на ffmpeg
 скипаются в окружениях без ffmpeg — установи `ffmpeg`, чтобы прогнать их).
+
+### Реальные адаптеры RouterAI (после открытия сети на `routerai.ru`)
+
+Сеть на `routerai.ru` открыли — проверил реальные эндпоинты вживую и заменил
+часть `NotImplementedError`-заглушек на рабочий код:
+
+- **LLM (`write_character`)** — работает как и раньше (M1), реальный вызов
+  `anthropic/claude-sonnet-5` через `write_character` подтверждён вживую.
+- **Изображения (`RouterAIImageProvider`)** — реализован и подтверждён вживую:
+  `POST /api/v1/images/generations` (OpenAI-совместимый, через `openai`
+  Python SDK), референсы лица передаются через `input_references` —
+  RouterAI-специфичное расширение формата `[{"type": "image_url",
+  "image_url": {"url": "data:image/png;base64,..."}}]` (формат подтверждён
+  ошибкой валидации API на неверном формате и успешным HTTP 200 на верном).
+  Полный прогон `init-persona` до `generate_canon_batch` включительно —
+  реальный вызов LLM + 2 реальных генерации изображений — отработал.
+- **Видео (`RouterAIVideoProvider`)** — реализован через прямые HTTP-запросы
+  (`httpx`, не `openai` SDK — его `videos.create` шлёт multipart в формате
+  OpenAI Sora API, а RouterAI ждёt обычный JSON и отвечает `400 Invalid
+  JSON format` на multipart). `POST /api/v1/videos` с
+  `{model, prompt, image: data-uri, size, duration}` подтверждён
+  структурированной ошибкой `402 Insufficient balance` с точной оценкой
+  стоимости (значит поля валидны) — сам факт успешной генерации и точная
+  форма ответа `GET /videos/{id}` при `status=completed` **не проверены**:
+  на аккаунте не хватило баланса даже на самый дешёвый вариант (46→40 RUB
+  доступно, нужно ≥65.79 RUB за 480p/5с). Реализация — лучшее предположение
+  по общей конвенции (`status`, `video_url`/`url`), с явным `ProviderError`
+  вместо тихого падения, если поля не совпадут. Поправить после первого
+  реального успешного прогона (нужно пополнить баланс).
+- **Сходство лица (`FaceEmbeddingProvider`)** — **всё ещё заглушка**. В
+  каталоге `routerai.ru/models` нет специализированной face-embedding/face-
+  recognition модели (ArcFace/InsightFace и т.п.) — только
+  мультимодальные text/image-эмбеддинги общего назначения (`google/gemini-
+  embedding-2`, `openai/text-embedding-3-large` и т.п.), которые эмбеддят
+  всё изображение целиком, а не лицо конкретно. Это открытый вопрос ещё из
+  ТЗ §11 (M1) и требует решения: либо использовать общий image-embedding
+  RouterAI как приближение (проще, но менее точно для сравнения именно
+  лиц), либо подключить локальную face-recognition модель (например, пакет
+  `insightface`, без внешнего API). Нужно решение владельца проекта, прежде
+  чем реализовывать.
+- `models.yaml` — ID моделей из ТЗ §3.1 подтверждены существующими в
+  каталоге на 27.09.2026 (`anthropic/claude-sonnet-5`,
+  `bytedance-seed/seedream-4.5`, `black-forest-labs/flux.2-pro`,
+  `alibaba/wan-2.6`, `bytedance/seedance-2.0`, `deepseek/deepseek-v4-pro-0813`).
+- Добавлены явные зависимости `openai`, `httpx` в `pyproject.toml` (ранее
+  использовались только транзитивно через `langchain-openai`).
+- Смоук-тест `uv run init-persona --brief persona/brief.md --name "Mila Novak"`
+  прошёл реальные `write_character` + `generate_canon_batch` (1 LLM-вызов +
+  2 реальные генерации изображений, включая аутентичный гардеробный лист
+  персонажа) и упал именно на `qc_embedding` — ожидаемо, т.к. эта заглушка
+  ещё не реализована. Результат теста не закоммичен (не хватает `canon/`,
+  инициализация не завершена).
