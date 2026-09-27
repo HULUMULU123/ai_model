@@ -6,17 +6,18 @@
 запрос принят как валидный, упёрся в `402 Insufficient balance`, а не в
 ошибку формата параметров.
 
-Модель по умолчанию сменена на `bytedance-seed/seed-audio-1-0` (см.
-`models.yaml`, раздел `voice`). **Подтверждено вживую 27.09.2026** (реальный
-прогон через Telegram-бота):
-  - `voice` для этой модели принимает произвольное текстовое описание
-    голоса/тона (не короткий пресет-id) — запрос дошёл до генерации.
-  - `response_format` — **только `"mp3"` или `"pcm"`**, НЕ `"opus"`: попытка
-    с `"opus"` вернула `503` с телом `{"error": "... ZodError ...
-    invalid_value ... path: response_format ... expected \"mp3\"|\"pcm\""}`.
-    Отсюда дефолт `"mp3"` в `generate()` ниже и `gen.telegram_entry` шлёт
-    результат через `sendAudio`, а не `sendVoice` (тому нужен ogg/opus,
-    которого эта модель не отдаёт, а перекодирования в инструменте нет).
+**Модель `bytedance-seed/seed-audio-1-0` пробовалась и отклонена** после
+реального прогона: `503 {"error":{"message":"Provider rejected the request:
+speaker <текст>...","code":400}}` — поле у неё называется `speaker`, а не
+`voice`, и оно НЕ принимает свободное текстовое описание голоса, только
+конкретный Seed speaker ID (недоступный без документации ByteDance Seed).
+Та же попытка также показала `response_format` **только `"mp3"`/`"pcm"`**,
+не `"opus"` — отсюда дефолт `"mp3"` в `generate()` ниже; `gen.telegram_entry`
+шлёт результат через `sendAudio`, не `sendVoice` (тому нужен ogg/opus).
+
+Текущая модель по умолчанию — `google/gemini-3.8-flash-tts` (см.
+`models.yaml`), она принимает короткие пресет-id голоса (`voice="Leda"` и
+т.п.), что и передаётся сюда без изменений в адаптере.
 """
 
 from __future__ import annotations

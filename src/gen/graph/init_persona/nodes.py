@@ -69,6 +69,9 @@ def _render_bible_md(bible: PersonaBible) -> str:
         "## Внешность",
         bible.appearance,
         "",
+        "## Тело",
+        bible.body,
+        "",
         "## Сигнатурные детали",
         *[f"- {d}" for d in bible.signature_details],
         "",
@@ -83,6 +86,9 @@ def _render_bible_md(bible: PersonaBible) -> str:
         "",
         "## Палитра",
         ", ".join(bible.palette),
+        "",
+        "## Мир",
+        *[f"- {key}: {value}" for key, value in bible.world.items()],
         "",
         "## Чего не делать",
         *[f"- {d}" for d in bible.forbidden],
@@ -99,11 +105,12 @@ def build_reference_prompt(state: InitPersonaState, deps: NodeDeps) -> dict:
     wardrobe_items = "; ".join(
         f"{situation}: {', '.join(items)}" for situation, items in bible.wardrobe.items()
     )
+    appearance_full = f"{bible.appearance} {bible.body}".strip()
 
     portrait_template = (deps.prompts_dir / "canon_portrait_sheet.md").read_text(encoding="utf-8")
     portrait_prompt = portrait_template.format(
         name=bible.name,
-        appearance=bible.appearance,
+        appearance=appearance_full,
         signature_details=signature_details,
         forbidden=forbidden,
     )
@@ -111,7 +118,7 @@ def build_reference_prompt(state: InitPersonaState, deps: NodeDeps) -> dict:
     wardrobe_template = (deps.prompts_dir / "canon_wardrobe_sheet.md").read_text(encoding="utf-8")
     wardrobe_prompt = wardrobe_template.format(
         name=bible.name,
-        appearance=bible.appearance,
+        appearance=appearance_full,
         signature_details=signature_details,
         wardrobe_items=wardrobe_items,
         palette=palette,

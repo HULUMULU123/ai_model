@@ -58,12 +58,21 @@ def build_prompt(state: GenerateState, deps: NodeDeps) -> dict:
     )
     signature_details = persona_ctx.bible_section("Сигнатурные детали") or ""
     forbidden = persona_ctx.bible_section("Чего не делать") or ""
+    body = persona_ctx.bible_section("Тело") or ""
+    # Мир (питомец/машина/дом) — без этого раньше каждая генерация "не знала"
+    # про Клипа/Црвену/гараж и модель рисовала что попало для этих сущностей;
+    # теперь подмешивается в КАЖДЫЙ промпт фото/видео (см. bible_section).
+    world = persona_ctx.bible_section("Мир") or ""
+    appearance = persona_ctx.bible_section("Внешность") or persona_ctx.bible_text
+    if body:
+        appearance = f"{appearance} {body}"
     prompt = template.format(
         name=persona_ctx.name,
-        appearance=persona_ctx.bible_section("Внешность") or persona_ctx.bible_text,
+        appearance=appearance,
         signature_details=signature_details,
         forbidden=forbidden,
         wardrobe_text=wardrobe_text,
+        world=world,
         scene_brief=state["scene_brief"],
     )
     return {"prompt": prompt, "attempts": 0}

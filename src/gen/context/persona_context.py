@@ -23,17 +23,24 @@ class PersonaBible(BaseModel):
 
     Поля соответствуют разделам bible.md из ТЗ: внешность, сигнатурные детали,
     характер, биография-канон, голос в текстах, гардероб по ситуациям,
-    палитра, "чего не делать".
+    палитра, "чего не делать" — плюс `body` и `world`, добавленные по прямому
+    запросу: раньше `build_prompt` не знал о питомце/машине/доме персонажа,
+    потому что этого не было нигде в структурированном виде — только
+    россыпью в `backstory`, откуда `build_prompt` их не вытаскивал. Теперь
+    это отдельные поля, которые `build_prompt` подмешивает в КАЖДЫЙ промпт
+    фото/видео — единый контекст персонажа вместо разрозненных генераций.
     """
 
     name: str
     appearance: str
+    body: str
     signature_details: list[str] = Field(default_factory=list)
     personality: str
     backstory: str
     voice: str
     wardrobe: dict[str, list[str]] = Field(default_factory=dict)
     palette: list[str] = Field(default_factory=list)
+    world: dict[str, str] = Field(default_factory=dict)
     forbidden: list[str] = Field(default_factory=list)
 
 

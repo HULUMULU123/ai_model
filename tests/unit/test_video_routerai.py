@@ -124,3 +124,64 @@ def test_generate_raises_on_unknown_status(tmp_path, source_image):
 
     with pytest.raises(ProviderError):
         asyncio.run(provider.generate("prompt", source_image=source_image))
+
+
+@respx.mock
+def test_generate_sends_reference_images_when_given(tmp_path, source_image):
+    """Регрессия на реальный баг: reference_images принимались функцией, но
+    никогда не попадали в тело запроса — видео теряло консистентность лица."""
+    ref1 = tmp_path / "ref1.png"
+    ref1.write_bytes(b"ref-bytes-1")
+
+    create_route = respx.post("https://routerai.ru/api/v1/videos").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "gen-vid-4",
+                "polling_url": "https://routerai.ru/api/v1/videos/gen-vid-4",
+                "status": "completed",
+                "video_url": "https://cdn/z.mp4",
+            },
+        )
+    )
+    respx.get("https://cdn/z.mp4").mock(return_value=httpx.Response(200, content=b"video-bytes-4"))
+
+    provider = RouterAIVideoProvider(
+        api_key="key",
+        base_url="https://routerai.ru/api/v1",
+        model="alibaba/wan-3.0",
+        output_dir=tmp_path,
+    )
+
+    asyncio.run(provider.generate("prompt", source_image=source_image, reference_images=[ref1]))
+
+    sent_body = create_route.calls[0].request.content
+    assert b"reference_images" in sent_body
+
+
+@respx.mock
+def test_generate_omits_reference_images_when_not_given(tmp_path, source_image):
+    create_route = respx.post("https://routerai.ru/api/v1/videos").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "gen-vid-5",
+                "polling_url": "https://routerai.ru/api/v1/videos/gen-vid-5",
+                "status": "completed",
+                "video_url": "https://cdn/w.mp4",
+            },
+        )
+    )
+    respx.get("https://cdn/w.mp4").mock(return_value=httpx.Response(200, content=b"video-bytes-5"))
+
+    provider = RouterAIVideoProvider(
+        api_key="key",
+        base_url="https://routerai.ru/api/v1",
+        model="alibaba/wan-3.0",
+        output_dir=tmp_path,
+    )
+
+    asyncio.run(provider.generate("prompt", source_image=source_image))
+
+    sent_body = create_route.calls[0].request.content
+    assert b"reference_images" not in sent_body

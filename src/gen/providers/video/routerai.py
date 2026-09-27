@@ -37,6 +37,19 @@ Invalid JSON format`, то есть эндпоинт ждёт обычный JSO
 единого поля `size` отправляются отдельные `resolution`+`aspect_ratio`.
 Если API этой модели на самом деле ждёт другие имена полей — вернётся
 ошибка API, а не тихая генерация с неверным разрешением.
+
+**Найден и исправлен реальный баг (лицо в видео не совпадало с
+персонажем):** параметр `reference_images` принимался функцией, но НИКОГДА
+не попадал в тело запроса — видео генерировалось только из текстового
+промпта и одного `image` (первого кадра), без дополнительных референсов
+лица. Описание `wan-3.0` в каталоге явно упоминает генерацию "с
+использованием эталонного руководства" — то есть модель, вероятно,
+поддерживает отдельный параметр для референсов. Ниже референсы теперь
+отправляются как `reference_images: [data-uri, ...]`. **Имя и формат этого
+поля НЕ подтверждены реальным запросом** — лучшее предположение по
+аналогии с `image` (тоже data URI); если API отклонит поле или просто
+проигнорирует его — видео всё равно сгенерируется по `image`+`prompt`, как
+раньше, `reference_images` не является обязательным полем в этом запросе.
 """
 
 from __future__ import annotations
@@ -99,19 +112,19 @@ class RouterAIVideoProvider(VideoProvider):
         source_image: Path,
         reference_images: list[Path] | None = None,
     ) -> Path:
+        payload = {
+            "model": self._model,
+            "prompt": prompt,
+            "image": _image_to_data_uri(source_image),
+            "resolution": self._resolution,
+            "aspect_ratio": self._aspect_ratio,
+            "duration": self._duration_seconds,
+        }
+        if reference_images:
+            payload["reference_images"] = [_image_to_data_uri(p) for p in reference_images]
+
         async with httpx.AsyncClient(base_url=self._base_url, headers=self._headers) as client:
-            create_response = await client.post(
-                "/videos",
-                json={
-                    "model": self._model,
-                    "prompt": prompt,
-                    "image": _image_to_data_uri(source_image),
-                    "resolution": self._resolution,
-                    "aspect_ratio": self._aspect_ratio,
-                    "duration": self._duration_seconds,
-                },
-                timeout=60.0,
-            )
+            create_response = await client.post("/videos", json=payload, timeout=60.0)
             if create_response.status_code >= 400:
                 raise ProviderError(
                     f"RouterAI videos API отклонил запрос ({create_response.status_code}): "
@@ -124,14 +137,17 @@ class RouterAIVideoProvider(VideoProvider):
             polling_url = job.get("polling_url") or f"{self._base_url}/videos/{job_id}"
 
             deadline = time.monotonic() + POLL_TIMEOUT_SECONDS
+            first_check = True
             while True:
-                status_response = await client.get(polling_url, timeout=30.0)
-                if status_response.status_code >= 400:
-                    raise ProviderError(
-                        f"RouterAI videos API: ошибка при опросе статуса "
-                        f"({status_response.status_code}): {status_response.text}"
-                    )
-                job = status_response.json()
+                if not first_check:
+                    status_response = await client.get(polling_url, timeout=30.0)
+                    if status_response.status_code >= 400:
+                        raise ProviderError(
+                            f"RouterAI videos API: ошибка при опросе статуса "
+                            f"({status_response.status_code}): {status_response.text}"
+                        )
+                    job = status_response.json()
+                first_check = False
                 status = job.get("status")
 
                 if status == "completed":

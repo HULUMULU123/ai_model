@@ -4,6 +4,9 @@ Signature details, keep in every panel: {signature_details}
 
 Wearing: {wardrobe_text}
 
+World of this character (recurring people/pets/vehicles/places — keep them
+visually consistent whenever the scene mentions them): {world}
+
 Scene: {scene_brief}
 
 Candid phone photo shot by a friend, casual imperfect framing, 35mm film

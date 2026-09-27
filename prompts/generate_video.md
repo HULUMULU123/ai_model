@@ -4,6 +4,9 @@ Signature details, keep visible: {signature_details}
 
 Wearing: {wardrobe_text}
 
+World of this character (recurring people/pets/vehicles/places — keep them
+visually consistent whenever the scene mentions them): {world}
+
 Scene: {scene_brief}
 
 Shot like a friend filmed it on a phone mounted on a tripod: steady, static

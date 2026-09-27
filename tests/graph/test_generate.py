@@ -177,7 +177,25 @@ def test_build_prompt_contains_bible_and_wardrobe(persona_ctx):
     assert "freckles" in result["prompt"]
     assert "серая толстовка" in result["prompt"]
     assert "сцена в кафе" in result["prompt"]
+    # Тело и мир (питомец/машина) теперь подмешиваются в КАЖДЫЙ промпт —
+    # раньше их не было вообще, и модель "не знала" про Клипа/Црвену.
+    assert "Athletic slim build" in result["prompt"]
+    assert "Balkan mixed-breed dog" in result["prompt"]
+    assert "1987 BMW E30" in result["prompt"]
     # Промпт для генерации изображения не должен тащить всю биографию/голос —
     # только визуально релевантные разделы bible.md.
     assert "Short phrases" not in result["prompt"]
     assert "Grew up in Split" not in result["prompt"]
+
+
+def test_build_prompt_for_video_also_contains_world(persona_ctx):
+    deps = NodeDeps(image_provider=None, face_embedding_provider=None, compliance_provider=None)
+
+    result = build_prompt(
+        {"scene_brief": "у гаража с Клипом", "persona_ctx": persona_ctx, "format": "video"},
+        deps,
+    )
+
+    assert "Balkan mixed-breed dog" in result["prompt"]
+    assert "1987 BMW E30" in result["prompt"]
+    assert "Shot like a friend filmed it on a phone mounted on a tripod" in result["prompt"]

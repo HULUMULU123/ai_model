@@ -37,30 +37,28 @@ video:
 
 voice:
   # Не в исходном ТЗ (там только фото/видео) — добавлено по прямому запросу
-  # владельца. Модель по умолчанию — bytedance-seed/seed-audio-1-0 (семейство
-  # Seed, как и фото seedream-4.5). Выбор модели/описания голоса сделан БЕЗ
-  # обращения к API (по прямой просьбе) — не то же самое, что "проверено
-  # вживую".
-  default: bytedance-seed/seed-audio-1-0
+  # владельца.
+  #
+  # bytedance-seed/seed-audio-1-0 (был выбран без обращения к API) СЛОМАН на
+  # реальном прогоне: `503 {"error":{"message":"Provider rejected the
+  # request: speaker <наш текст>...","code":400}}`. Значит поле называется
+  # `speaker`, не `voice`, и — что важнее — оно НЕ принимает произвольное
+  # описание голоса на естественном языке, а требует конкретный Seed speaker
+  # ID, которого у нас нет и список которого недоступен без документации
+  # ByteDance Seed. Отказался от этой модели.
+  #
+  # Откат на google/gemini-3.8-flash-tts — эта модель была проверена вживую
+  # ещё в первом прогоне (запрос дошёл до 402 Insufficient balance, не до
+  # ошибки формата) и принимает короткие пресет-id голоса (документированы
+  # 30 студийных голосов: Zephyr, Kore, Leda, Aoede, ...), а не свободный
+  # текст — так безопаснее, раз "speaker vs voice-description" на практике
+  # оказалось моделезависимым и непредсказуемым без документации.
+  default: google/gemini-3.8-flash-tts
   quality: minimax/speech-2.8-hd
-  # ПОДТВЕРЖДЕНО вживую 27.09.2026 (реальный прогон через бота): эта модель
-  # принимает произвольный текст в поле `voice` (описание голоса/тона, не
-  # короткий пресет-id) — запрос дошёл до генерации, не отклонён по формату
-  # `voice`. НЕ путать с response_format: та же попытка вернула `503 ZodError
-  # ... invalid_value ... path: response_format ... expected "mp3"|"pcm"` —
-  # значит response_format="opus" эта модель не поддерживает вообще, только
-  # mp3/pcm (см. gen/voice.py — response_format="mp3" по умолчанию,
-  # gen/telegram_entry.py отправляет получившийся mp3 через sendAudio, не
-  # sendVoice, потому что настоящий кружок-голосовое Telegram требует
-  # ogg/opus, а перекодирования в этом инструменте нет).
-  voice_name: >-
-    Young confident woman in her mid-20s, warm and slightly playful tone with
-    dry sense of humor, casual conversational pace, natural and unpolished
-    (not corporate/announcer-like), light Croatian accent in English speech.
-    Sounds like a real voice message recorded on the go — as if she's walking
-    somewhere or doing something with her hands while talking, not sitting
-    still in front of a microphone: natural breathing, slightly uneven pacing,
-    occasional background-life energy, not studio-clean narration.
-  # Ещё не проверено на слух — совпадает ли это описание с ожидаемым звучанием
-  # персонажа, может решить только прослушивание. Сравнение пресетов:
-  # `uv run voice-line --text "..." --voice "<альтернативное описание>"`.
+  # "Leda" — по официальному описанию Google ("Youthful"), разумное
+  # приближение под 24-летнюю героиню. НЕ проверено на слух — совпадает ли
+  # это со звучанием персонажа, может решить только прослушивание живым
+  # человеком. Сравнение пресетов без правки этого файла:
+  # `uv run voice-line --text "..." --voice Kore` (и другие: Zephyr, Aoede,
+  # Puck, ...).
+  voice_name: Leda

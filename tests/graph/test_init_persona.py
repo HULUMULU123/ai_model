@@ -13,12 +13,17 @@ from gen.providers.llm.mock import MockLLMProvider
 FIXTURE_BIBLE = PersonaBible(
     name="Mila Novak",
     appearance="oval face, grey-green eyes, freckles",
+    body="athletic slim build, 170cm, toned arms",
     signature_details=["gold chain with a key pendant", "scar on left eyebrow"],
     personality="confident, dry humor",
     backstory="grew up in Split, inherited a garage from her grandfather",
     voice="short phrases, croatian words like ajme",
     wardrobe={"garage": ["navy coverall", "white tank top"]},
     palette=["navy", "rust-red", "cream"],
+    world={
+        "pet": "sand-coloured Balkan mixed-breed dog, one ear up one ear down",
+        "vehicle": "faded red two-door 1987 BMW E30, chrome bumpers",
+    },
     forbidden=["plastic skin", "platinum hair"],
 )
 
@@ -62,6 +67,9 @@ def test_init_persona_produces_bible_and_canon_files(deps):
     bible_text = (persona_dir / "bible.md").read_text(encoding="utf-8")
     assert "Mila Novak" in bible_text
     assert "gold chain with a key pendant" in bible_text
+    assert "athletic slim build" in bible_text
+    assert "Balkan mixed-breed dog" in bible_text
+    assert "1987 BMW E30" in bible_text
 
     canon_dir = persona_dir / "canon"
     canon_files = sorted(canon_dir.iterdir())
@@ -82,3 +90,7 @@ def test_init_persona_prompt_contains_wardrobe_and_signature_details(deps):
     assert "navy coverall" in result["wardrobe_prompt"]
     assert "gold chain with a key pendant" in result["portrait_prompt"]
     assert "gold chain with a key pendant" in result["wardrobe_prompt"]
+    # body подмешивается в appearance для канон-листов (единый физический
+    # образ на портрете и на гардеробе, не только лицо).
+    assert "athletic slim build" in result["portrait_prompt"]
+    assert "athletic slim build" in result["wardrobe_prompt"]
