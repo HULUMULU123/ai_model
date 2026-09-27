@@ -1,4 +1,8 @@
-"""Узлы графа `generate` (фото; видео переиспользует те же узлы на M5)."""
+"""Узлы графа `generate` (фото и видео — один граф, ветвление по `state["format"]`).
+
+`generate_one` — асинхронный узел (video использует async `VideoProvider` с
+polling), поэтому граф целиком запускается через `.ainvoke()`.
+"""
 
 from __future__ import annotations
 
@@ -10,13 +14,15 @@ from gen.core.errors import ContentGenError
 from gen.delivery.local import deliver_to_output
 from gen.graph.generate.state import GenerateState
 from gen.postprocess.image import crop_to_aspect, upscale
-from gen.providers.base import FaceEmbeddingProvider, ImageProvider
+from gen.postprocess.video import extract_frames, normalize_video
+from gen.providers.base import FaceEmbeddingProvider, ImageProvider, VideoProvider
 from gen.qc.compliance import ComplianceProvider
 
 PROMPTS_DIR = Path(__file__).resolve().parents[4] / "prompts"
 
 QC_SIMILARITY_THRESHOLD = 0.5
 DEFAULT_ASPECT = "4:5"
+VIDEO_QC_FRAMES = 2
 
 
 class MissingPersonaContextError(ContentGenError):
@@ -28,6 +34,7 @@ class NodeDeps:
     image_provider: ImageProvider
     face_embedding_provider: FaceEmbeddingProvider
     compliance_provider: ComplianceProvider
+    video_provider: VideoProvider | None = None
     prompts_dir: Path = PROMPTS_DIR
     output_root: Path = Path("output")
 
@@ -51,21 +58,46 @@ def build_prompt(state: GenerateState, deps: NodeDeps) -> dict:
     return {"prompt": prompt, "attempts": 0}
 
 
-def generate_one(state: GenerateState, deps: NodeDeps) -> dict:
+async def generate_one(state: GenerateState, deps: NodeDeps) -> dict:
     persona_ctx: PersonaContext = state["persona_ctx"]
-    candidates = deps.image_provider.generate(
-        state["prompt"],
-        reference_images=persona_ctx.canon_images,
-        n=1,
-    )
-    return {"candidate": candidates[0], "attempts": state.get("attempts", 0) + 1}
+
+    if state["format"] == "video":
+        if deps.video_provider is None:
+            raise ValueError("format=video требует NodeDeps.video_provider")
+        candidate = await deps.video_provider.generate(
+            state["prompt"],
+            source_image=persona_ctx.canon_images[0],
+            reference_images=persona_ctx.canon_images,
+        )
+    else:
+        candidates = deps.image_provider.generate(
+            state["prompt"],
+            reference_images=persona_ctx.canon_images,
+            n=1,
+        )
+        candidate = candidates[0]
+
+    return {"candidate": candidate, "attempts": state.get("attempts", 0) + 1}
+
+
+def _qc_reference_images(state: GenerateState, deps: NodeDeps) -> list[Path]:
+    if state["format"] == "video":
+        return extract_frames(state["candidate"], n=VIDEO_QC_FRAMES)
+    return [state["candidate"]]
 
 
 def qc_one(state: GenerateState, deps: NodeDeps) -> dict:
     persona_ctx: PersonaContext = state["persona_ctx"]
-    candidate_embedding = deps.face_embedding_provider.embed(state["candidate"])
     reference_embedding = deps.face_embedding_provider.embed(persona_ctx.canon_images[0])
-    score = deps.face_embedding_provider.similarity(candidate_embedding, reference_embedding)
+
+    candidate_images = _qc_reference_images(state, deps)
+    scores = [
+        deps.face_embedding_provider.similarity(
+            deps.face_embedding_provider.embed(img), reference_embedding
+        )
+        for img in candidate_images
+    ]
+    score = min(scores)
 
     update: dict = {"qc_score": score}
     if score > state.get("best_score", -1.0):
@@ -92,14 +124,21 @@ def finalize_accepted(state: GenerateState) -> dict:
 
 def post_process(state: GenerateState) -> dict:
     candidate = state["best_candidate"]
-    aspect = state.get("aspect") or DEFAULT_ASPECT
-    upscale(candidate)
-    crop_to_aspect(candidate, aspect)
+    if state["format"] == "video":
+        normalize_video(candidate)
+    else:
+        aspect = state.get("aspect") or DEFAULT_ASPECT
+        upscale(candidate)
+        crop_to_aspect(candidate, aspect)
     return {}
 
 
 def compliance_check(state: GenerateState, deps: NodeDeps) -> dict:
-    result = deps.compliance_provider.check(state["best_candidate"])
+    if state["format"] == "video":
+        check_target = extract_frames(state["best_candidate"], n=1)[0]
+    else:
+        check_target = state["best_candidate"]
+    result = deps.compliance_provider.check(check_target)
     return {"compliance_passed": result.passed, "compliance_reason": result.reason}
 
 

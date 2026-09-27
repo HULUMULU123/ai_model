@@ -33,7 +33,7 @@ uv run pytest
 | M2. Команда init | ✅ готово — граф `init_persona` на моках, 1 LLM + 2 image-вызова по умолчанию |
 | M3. Фото-генерация | ✅ готово — граф `generate` на моках, 1 генерация + макс. 1 ретрай по умолчанию |
 | M4. Пост-обработка и доставка (фото) | ✅ готово — апскейл/кроп, compliance-развилка, доставка в `output/<timestamp>/` |
-| M5. Видео-генерация | не начато |
+| M5. Видео-генерация | ✅ готово — граф `generate` переиспользован для video, ffmpeg-обработка |
 
 На M0 команды `init-persona` и `generate` только парсят аргументы и печатают
 `--help`; вызов без `--help` завершается `NotImplementedError` — реальная
@@ -165,3 +165,38 @@ uv run pytest
   ресемплинг, не ИИ-суперрезолюшн; для видео пост-обработка (ffmpeg) — M5.
 
 Проверить руками (без сети, на моках): `uv run pytest tests/graph/test_generate.py tests/unit/test_postprocess_image.py tests/unit/test_compliance.py tests/unit/test_delivery_local.py -v`.
+
+### M5: видео-генерация
+
+- Один и тот же граф `generate` обслуживает фото и видео (ТЗ §8) — ветвление
+  по `state["format"]` внутри узлов, не отдельный граф:
+  - `generate_one` — асинхронный узел; для `format=video` вызывает
+    `VideoProvider.generate(...)` (image-to-video, polling внутри адаптера);
+    поэтому граф теперь запускается через `.ainvoke()` (`run_generate`
+    оборачивает это в `asyncio.run` — CLI остаётся синхронным).
+  - `qc_one` — для видео вызывает `extract_frames(candidate, n=2)` (не 3–5,
+    как и требует ТЗ §8) и берёт минимальное сходство среди кадров, вместо
+    прямого сравнения видеофайла как изображения.
+  - `post_process` — для видео вызывает `normalize_video` (ffmpeg) вместо
+    апскейла/кропа.
+  - `compliance_check` — для видео проверяет 1 извлечённый кадр (реальной
+    видео-модерации нет и не подтверждена документацией, как и NSFW-фото).
+- `src/gen/postprocess/video.py` — `extract_frames`/`normalize_video` через
+  `subprocess` + `ffmpeg`/`ffprobe` (документированный CLI, не выдуманный
+  HTTP API). Если ffmpeg не установлен — `FfmpegNotFoundError`, а не тихий
+  no-op.
+- **В этом окружении `ffmpeg` не установлен** — тесты на реальную видео-
+  обработку (`tests/unit/test_postprocess_video.py`) помечены
+  `skipif(not ffmpeg)` и корректно скипаются (2 skipped), а не притворяются
+  зелёными. Граф-уровневый тест видео-ветки (`tests/graph/test_generate.py::test_generate_video_uses_video_provider_and_two_qc_frames`)
+  использует моки/monkeypatch на уровне узлов, чтобы проверить связность
+  графа и экономию (ровно 2 кадра на QC, 1 на compliance) без ffmpeg.
+- Реальный `VideoProvider` (RouterAI/fal.ai image-to-video) — по-прежнему
+  заглушка `NotImplementedError` из M1: эндпоинт не подтверждён документацией,
+  и сеть на `routerai.ru` в этом окружении заблокирована политикой сети.
+- `AsyncPostgresSaver` сознательно не подключён — ТЗ прямо говорит не
+  усложнять с БД-чекпоинтами, пока нет реальной необходимости в надёжности
+  длинных генераций; `InMemorySaver` остаётся дефолтом.
+
+Проверить руками: `uv run pytest` (все тесты без сети; 2 теста на ffmpeg
+скипаются в окружениях без ffmpeg — установи `ffmpeg`, чтобы прогнать их).

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from pathlib import Path
 
@@ -5,11 +6,13 @@ import pytest
 
 from gen.context.persona_context import PersonaContext
 from gen.core.errors import ContentGenError
+from gen.graph.generate import nodes as generate_nodes
 from gen.graph.generate.graph import build_generate_graph
 from gen.graph.generate.nodes import NodeDeps, build_prompt
 from gen.graph.generate.state import GenerateState
 from gen.providers.face_embedding.mock import MockFaceEmbeddingProvider
 from gen.providers.image.mock import MockImageProvider
+from gen.providers.video.mock import MockVideoProvider
 from gen.qc.compliance_mock import MockComplianceProvider
 
 FIXTURE_PERSONA_DIR = Path(__file__).parent.parent / "fixtures" / "persona"
@@ -43,17 +46,17 @@ def _deps(tmp_path, scores, *, compliance_passed=True, compliance_reason=None):
     )
 
 
-def _run(deps, persona_ctx, max_retries=1, aspect="4:5"):
+def _run(deps, persona_ctx, max_retries=1, aspect="4:5", format_="photo"):
     graph = build_generate_graph(deps, max_retries=max_retries)
     initial_state: GenerateState = {
         "scene_brief": "сцена в кафе, повседневный образ",
-        "format": "photo",
+        "format": format_,
         "persona_ctx": persona_ctx,
         "max_retries": max_retries,
         "aspect": aspect,
     }
     config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-    return graph.invoke(initial_state, config=config)
+    return asyncio.run(graph.ainvoke(initial_state, config=config))
 
 
 def test_generate_accepts_on_first_try_without_retry(tmp_path, persona_ctx):
@@ -109,6 +112,47 @@ def test_generate_rejected_by_compliance_is_not_delivered(tmp_path, persona_ctx)
     assert result["compliance_reason"] == "nudity detected"
     assert "delivered_path" not in result
     assert deps.image_provider.call_count == 1
+
+
+def test_generate_video_uses_video_provider_and_two_qc_frames(tmp_path, persona_ctx, monkeypatch):
+    """Граф-уровень: ветвление по format=video, без реального ffmpeg.
+
+    extract_frames/normalize_video тестируются на реальном ffmpeg отдельно в
+    tests/unit/test_postprocess_video.py (skip, если ffmpeg не установлен).
+    Здесь важна только связность графа и то, что QC берёт ровно 2 кадра, не
+    вызывая сам видео-файл напрямую как изображение.
+    """
+    video_dir = tmp_path / "video"
+    video_dir.mkdir()
+    frame_calls = []
+
+    def fake_extract_frames(video_path, *, n=2):
+        frame_calls.append(n)
+        frames = []
+        for i in range(n):
+            frame = video_dir / f"frame-{i}.png"
+            frame.write_bytes(b"fake-frame")
+            frames.append(frame)
+        return frames
+
+    monkeypatch.setattr(generate_nodes, "extract_frames", fake_extract_frames)
+    monkeypatch.setattr(generate_nodes, "normalize_video", lambda path: path)
+
+    video_provider = MockVideoProvider(video_dir)
+    deps = NodeDeps(
+        image_provider=None,
+        video_provider=video_provider,
+        face_embedding_provider=ScriptedFaceEmbeddingProvider([0.9, 0.9]),
+        compliance_provider=MockComplianceProvider(passed=True),
+        output_root=tmp_path / "output",
+    )
+
+    result = _run(deps, persona_ctx, format_="video")
+
+    assert video_provider.call_count == 1
+    assert frame_calls == [2, 1]  # qc_one (n=2), compliance_check (n=1)
+    assert result["compliance_passed"] is True
+    assert result["delivered_path"].is_file()
 
 
 def test_build_prompt_requires_persona_context():
