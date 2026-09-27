@@ -10,6 +10,8 @@ https://core.telegram.org/bots/api#getupdates), процесс работает,
 Формат сообщения:
   - обычный текст → бриф на фото, `--aspect 9:16` (вертикаль под Reels/Stories)
   - `video: <бриф>` → бриф на видео (вертикаль 9:16 по умолчанию в адаптере)
+  - `voice: <текст>` (или `озвучь:`) → озвучка текста голосом персонажа
+    (не входит в исходное ТЗ — добавлено отдельно, см. `src/gen/voice.py`)
   - `/start` или `/help` → инлайн-клавиатура с краткими подсказками по каждой
     команде (нажатие кнопки не запускает генерацию — только показывает
     инструкцию, чтобы не путаться в форматах)
@@ -26,14 +28,22 @@ import httpx
 
 from gen.core.config import load_settings
 from gen.core.logging import get_logger
-from gen.delivery.telegram import answer_callback_query, send_message, send_photo, send_video
+from gen.delivery.telegram import (
+    answer_callback_query,
+    send_message,
+    send_photo,
+    send_video,
+    send_voice,
+)
 from gen.graph.generate.run import run_generate
+from gen.voice import run_voice_line
 
 logger = get_logger(__name__)
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
 POLL_TIMEOUT_SECONDS = 30
 VIDEO_PREFIXES = ("video:", "видео:")
+VOICE_PREFIXES = ("voice:", "озвучь:")
 
 WELCOME_TEXT = (
     "Привет! Я генерирую фото и видео персонажа по твоему брифу. "
@@ -59,6 +69,15 @@ HELP_BUTTONS: list[tuple[str, str, str]] = [
         ),
     ),
     (
+        "help_voice",
+        "🎙️ Голос",
+        (
+            "Напиши с префиксом voice: (или озвучь:), например:\n«voice: Crvena update, day "
+            "twelve. Still not starting.»\nПрисылаю голосовым сообщением, не входит в "
+            "исходное ТЗ — добавлено отдельно по запросу."
+        ),
+    ),
+    (
         "help_general",
         "❓ Как это работает",
         (
@@ -72,11 +91,17 @@ HELP_BUTTONS: list[tuple[str, str, str]] = [
 
 
 def parse_message(text: str) -> tuple[str, str]:
-    """Возвращает (format_, scene_brief) из текста сообщения."""
+    """Возвращает (format_, scene_brief) из текста сообщения.
+
+    `format_` — один из `photo`/`video`/`voice`.
+    """
     stripped = text.strip()
     for prefix in VIDEO_PREFIXES:
         if stripped.lower().startswith(prefix):
             return "video", stripped[len(prefix) :].strip()
+    for prefix in VOICE_PREFIXES:
+        if stripped.lower().startswith(prefix):
+            return "voice", stripped[len(prefix) :].strip()
     return "photo", stripped
 
 
@@ -104,6 +129,16 @@ def _handle_message(*, bot_token: str, chat_id: str, text: str) -> None:
         return
 
     send_message(f"Генерирую {format_}: {scene_brief}", bot_token=bot_token, chat_id=chat_id)
+
+    if format_ == "voice":
+        try:
+            delivered_path = run_voice_line(scene_brief, response_format="opus")
+        except Exception as exc:  # noqa: BLE001 - показать причину владельцу, не падать молча
+            send_message(f"Ошибка озвучки: {exc}", bot_token=bot_token, chat_id=chat_id)
+            return
+        send_voice(delivered_path, bot_token=bot_token, chat_id=chat_id, caption=scene_brief)
+        return
+
     try:
         result = run_generate(scene_brief=scene_brief, format_=format_, aspect="9:16")
     except Exception as exc:  # noqa: BLE001 - показать причину владельцу, не падать молча

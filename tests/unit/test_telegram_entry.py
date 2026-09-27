@@ -32,6 +32,20 @@ def test_parse_message_video_prefix_russian():
     assert brief == "у гаража с Клипом"
 
 
+def test_parse_message_voice_prefix_english():
+    format_, brief = parse_message("voice: Crvena update, day twelve")
+
+    assert format_ == "voice"
+    assert brief == "Crvena update, day twelve"
+
+
+def test_parse_message_voice_prefix_russian():
+    format_, brief = parse_message("озвучь: garage diaries, день 12")
+
+    assert format_ == "voice"
+    assert brief == "garage diaries, день 12"
+
+
 def test_parse_message_strips_whitespace():
     format_, brief = parse_message("  сцена на пляже  ")
 

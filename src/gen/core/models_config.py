@@ -35,3 +35,11 @@ def resolve_model(config: dict, task: str, *, tier: str = "default") -> str:
     if not task_config or tier not in task_config:
         raise ModelsConfigError(f"В models.yaml нет '{task}.{tier}'.")
     return task_config[tier]
+
+
+def resolve_setting(config: dict, task: str, key: str) -> str:
+    """Читает произвольную настройку задачи (не тир модели), например `voice_name`."""
+    task_config = config.get(task)
+    if not task_config or key not in task_config:
+        raise ModelsConfigError(f"В models.yaml нет '{task}.{key}'.")
+    return task_config[key]

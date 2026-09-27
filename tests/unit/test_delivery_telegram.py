@@ -8,6 +8,7 @@ from gen.delivery.telegram import (
     send_message,
     send_photo,
     send_video,
+    send_voice,
 )
 
 
@@ -48,6 +49,19 @@ def test_send_video_success(tmp_path):
     )
 
     send_video(video, bot_token="123:abc", chat_id="42")
+
+    assert route.called
+
+
+@respx.mock
+def test_send_voice_success(tmp_path):
+    voice = tmp_path / "line.opus"
+    voice.write_bytes(b"fake-voice-bytes")
+    route = respx.post("https://api.telegram.org/bot123:abc/sendVoice").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+
+    send_voice(voice, bot_token="123:abc", chat_id="42")
 
     assert route.called
 

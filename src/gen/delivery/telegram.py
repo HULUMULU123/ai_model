@@ -62,6 +62,20 @@ def send_video(path: Path, *, bot_token: str, chat_id: str, caption: str = "") -
     )
 
 
+def send_voice(path: Path, *, bot_token: str, chat_id: str, caption: str = "") -> None:
+    """`sendVoice` (https://core.telegram.org/bots/api#sendvoice) — кружок-голосовое
+    в клиенте, а не файл-аудио, требует OGG/OPUS (или MP3/M4A — Telegram
+    перекодирует сам, но без гарантии round-кружка на всех клиентах)."""
+    _send_file(
+        bot_token=bot_token,
+        chat_id=chat_id,
+        method="sendVoice",
+        field_name="voice",
+        path=path,
+        caption=caption,
+    )
+
+
 def send_message(
     text: str,
     *,

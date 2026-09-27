@@ -21,6 +21,7 @@ dependencies = [
 [project.scripts]
 init-persona = "gen.cli:init_persona"
 generate = "gen.cli:generate"
+voice-line = "gen.cli:voice_line"
 telegram-bot = "gen.telegram_entry:main"
 
 [project.optional-dependencies]

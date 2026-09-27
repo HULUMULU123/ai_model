@@ -109,5 +109,28 @@ def generate(brief: str, format_: str, n: int, retries: int, quality: bool, aspe
         click.echo("Внимание: low-confidence — сходство лица ниже порога после всех ретраев")
 
 
+@click.command()
+@click.option("--text", type=str, required=True, help="Текст для озвучки (сцена/подпись).")
+@click.option(
+    "--quality",
+    is_flag=True,
+    default=False,
+    help="Использовать более дорогую TTS-модель (не по умолчанию).",
+)
+@click.option(
+    "--voice",
+    "voice_name",
+    type=str,
+    default=None,
+    help="Переопределить пресет голоса из models.yaml (для сравнения на слух).",
+)
+def voice_line(text: str, quality: bool, voice_name: str | None) -> None:
+    """Озвучить текст голосом персонажа (не входит в исходное ТЗ, добавлено отдельно)."""
+    from gen.voice import run_voice_line
+
+    delivered_path = run_voice_line(text, quality=quality, voice=voice_name)
+    click.echo(f"Готово: {delivered_path}")
+
+
 if __name__ == "__main__":
     init_persona()

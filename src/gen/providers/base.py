@@ -47,6 +47,14 @@ class VideoProvider(ABC):
         """Запускает генерацию видео и дожидается результата, возвращает путь к файлу."""
 
 
+class AudioProvider(ABC):
+    """Провайдер синтеза речи (озвучка текста голосом персонажа)."""
+
+    @abstractmethod
+    def generate(self, text: str, *, voice: str, response_format: str = "mp3") -> Path:
+        """Озвучивает `text` выбранным пресетом `voice`, возвращает путь к файлу."""
+
+
 class FaceEmbeddingProvider(ABC):
     """Провайдер эмбеддингов лица для QC сходства (без LLM)."""
 
