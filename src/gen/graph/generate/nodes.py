@@ -51,7 +51,8 @@ def build_prompt(state: GenerateState, deps: NodeDeps) -> dict:
             "build_prompt требует PersonaContext — сначала запусти `uv run init-persona`."
         )
 
-    template = (deps.prompts_dir / "generate_photo.md").read_text(encoding="utf-8")
+    template_name = "generate_video.md" if state.get("format") == "video" else "generate_photo.md"
+    template = (deps.prompts_dir / template_name).read_text(encoding="utf-8")
     wardrobe_text = "; ".join(
         f"{situation}: {', '.join(items)}" for situation, items in persona_ctx.wardrobe.items()
     )
@@ -74,9 +75,17 @@ async def generate_one(state: GenerateState, deps: NodeDeps) -> dict:
     if state["format"] == "video":
         if deps.video_provider is None:
             raise ValueError("format=video требует NodeDeps.video_provider")
+        # Сначала генерируем фото сцены (image-to-video из актуального кадра
+        # сцены, а не из статичного canon-референса) — по прямому запросу.
+        first_frame_candidates = deps.image_provider.generate(
+            state["prompt"],
+            reference_images=persona_ctx.canon_images,
+            n=1,
+        )
+        first_frame = first_frame_candidates[0]
         candidate = await deps.video_provider.generate(
             state["prompt"],
-            source_image=persona_ctx.canon_images[0],
+            source_image=first_frame,
             reference_images=persona_ctx.canon_images,
         )
     else:

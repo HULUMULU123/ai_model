@@ -64,13 +64,29 @@ def send_video(path: Path, *, bot_token: str, chat_id: str, caption: str = "") -
 
 def send_voice(path: Path, *, bot_token: str, chat_id: str, caption: str = "") -> None:
     """`sendVoice` (https://core.telegram.org/bots/api#sendvoice) — кружок-голосовое
-    в клиенте, а не файл-аудио, требует OGG/OPUS (или MP3/M4A — Telegram
-    перекодирует сам, но без гарантии round-кружка на всех клиентах)."""
+    в клиенте, официально требует OGG/OPUS. Наша TTS-модель отдаёт только
+    mp3/pcm (см. `gen.providers.audio.routerai`), поэтому для реальной
+    доставки используется `send_audio`, не эта функция — оставлена на случай,
+    если появится источник в ogg/opus (например, после ffmpeg-перекодирования)."""
     _send_file(
         bot_token=bot_token,
         chat_id=chat_id,
         method="sendVoice",
         field_name="voice",
+        path=path,
+        caption=caption,
+    )
+
+
+def send_audio(path: Path, *, bot_token: str, chat_id: str, caption: str = "") -> None:
+    """`sendAudio` (https://core.telegram.org/bots/api#sendaudio) — обычный
+    аудиофайл (mp3/m4a), не кружок-голосовое; используется для доставки TTS
+    в mp3, который `sendVoice` не может показать как настоящее голосовое."""
+    _send_file(
+        bot_token=bot_token,
+        chat_id=chat_id,
+        method="sendAudio",
+        field_name="audio",
         path=path,
         caption=caption,
     )

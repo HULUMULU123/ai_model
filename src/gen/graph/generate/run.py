@@ -8,7 +8,7 @@ from pathlib import Path
 
 from gen.context.persona_context import PersonaContext
 from gen.core.config import load_settings
-from gen.core.models_config import load_models_config, resolve_model
+from gen.core.models_config import load_models_config, resolve_model, resolve_setting
 from gen.graph.generate.graph import build_generate_graph
 from gen.graph.generate.nodes import NodeDeps
 from gen.graph.generate.state import GenerateState
@@ -50,6 +50,8 @@ async def _run_generate_async(
             api_key=settings.routerai_api_key,
             base_url=settings.routerai_base_url,
             model=resolve_model(models_config, "video", tier=tier),
+            resolution=resolve_setting(models_config, "video", "resolution"),
+            aspect_ratio=resolve_setting(models_config, "video", "aspect_ratio"),
         ),
         face_embedding_provider=InsightFaceEmbeddingProvider(),
         compliance_provider=NotImplementedComplianceProvider(),

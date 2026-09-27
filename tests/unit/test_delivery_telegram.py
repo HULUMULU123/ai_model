@@ -5,6 +5,7 @@ import respx
 from gen.delivery.telegram import (
     TelegramDeliveryError,
     answer_callback_query,
+    send_audio,
     send_message,
     send_photo,
     send_video,
@@ -62,6 +63,19 @@ def test_send_voice_success(tmp_path):
     )
 
     send_voice(voice, bot_token="123:abc", chat_id="42")
+
+    assert route.called
+
+
+@respx.mock
+def test_send_audio_success(tmp_path):
+    audio = tmp_path / "line.mp3"
+    audio.write_bytes(b"fake-audio-bytes")
+    route = respx.post("https://api.telegram.org/bot123:abc/sendAudio").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+
+    send_audio(audio, bot_token="123:abc", chat_id="42")
 
     assert route.called
 

@@ -11,7 +11,10 @@ Outfits, one per panel, left to right: {wardrobe_items}
 Palette: {palette}
 
 Candid phone photo look, 35mm film grain, photorealistic, natural fabrics
-with visible wrinkles and texture, no other text, no watermark.
+with visible wrinkles and texture. Natural real beauty, not magazine-perfect:
+visible skin texture, freckles and small imperfections exactly as described
+above, not retouched, no other text, no watermark.
 
 Avoid: illustration, cartoon, anime, 3d render, cgi, doll-like face,
-airbrushed skin, over-smoothed skin, plastic skin, waxy skin, {forbidden}
+airbrushed skin, over-smoothed skin, plastic skin, waxy skin, overly
+polished/perfect look, {forbidden}

@@ -9,8 +9,10 @@ Keep exactly: {appearance}
 Signature details, keep in every panel: {signature_details}
 
 Candid phone photo look, 35mm film grain, soft diffused daylight,
-photorealistic, visible pores and natural skin texture, no makeup look, no
-text, no watermark.
+photorealistic. Natural real beauty, not magazine-perfect: visible pores,
+natural skin texture, freckles and small imperfections exactly as described
+above, no makeup look, not retouched, no text, no watermark.
 
 Avoid: illustration, cartoon, anime, 3d render, cgi, doll-like face,
-airbrushed skin, over-smoothed skin, plastic skin, waxy skin, {forbidden}
+airbrushed skin, over-smoothed skin, plastic skin, waxy skin, overly
+polished/perfect look, {forbidden}

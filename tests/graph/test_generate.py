@@ -138,9 +138,10 @@ def test_generate_video_uses_video_provider_and_two_qc_frames(tmp_path, persona_
     monkeypatch.setattr(generate_nodes, "extract_frames", fake_extract_frames)
     monkeypatch.setattr(generate_nodes, "normalize_video", lambda path: path)
 
+    image_provider = MockImageProvider(tmp_path / "first_frame")
     video_provider = MockVideoProvider(video_dir)
     deps = NodeDeps(
-        image_provider=None,
+        image_provider=image_provider,
         video_provider=video_provider,
         face_embedding_provider=ScriptedFaceEmbeddingProvider([0.9, 0.9]),
         compliance_provider=MockComplianceProvider(passed=True),
@@ -149,6 +150,8 @@ def test_generate_video_uses_video_provider_and_two_qc_frames(tmp_path, persona_
 
     result = _run(deps, persona_ctx, format_="video")
 
+    # Сначала генерируется фото сцены (первый кадр), потом видео из него.
+    assert image_provider.call_count == 1
     assert video_provider.call_count == 1
     assert frame_calls == [2, 1]  # qc_one (n=2), compliance_check (n=1)
     assert result["compliance_passed"] is True

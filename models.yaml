@@ -19,42 +19,48 @@ photo:
   quality: black-forest-labs/flux.2-pro
 
 video:
-  default: alibaba/wan-2.6
+  # Сменено на Wan 3.0 по прямому запросу (было wan-2.6). Каталог
+  # (routerai.ru/models, кэш) для wan-3.0: supported_sizes: null,
+  # supported_resolutions: ["480p","720p","1080p"], supported_aspect_ratios:
+  # ["16:9","4:3","1:1","3:4","9:16"] — в отличие от wan-2.6 (у которой был
+  # конкретный supported_sizes набор WxH), здесь нет готовых WxH-строк,
+  # значит нужны отдельные поля resolution+aspect_ratio, а не единое "size".
+  # НЕ ПОДТВЕРЖДЕНО реальным запросом — это вывод из метаданных каталога, а
+  # не проверенный вживую контракт (в отличие от wan-2.6, где "size":"720x1280"
+  # дошёл до 402 Insufficient balance).
+  default: alibaba/wan-3.0
   quality: bytedance/seedance-2.0
+  # Разрешение — 720p (по прямому запросу, "пока"; 1080p доступно как
+  # supported_resolutions, поднять явным флагом позже, если понадобится).
+  resolution: "720p"
+  aspect_ratio: "9:16"
 
 voice:
   # Не в исходном ТЗ (там только фото/видео) — добавлено по прямому запросу
-  # владельца. Модель по умолчанию сменена на bytedance-seed/seed-audio-1-0
-  # (семейство Seed, как и фото bytedance-seed/seedream-4.5 в M2/M3) по
-  # прямому запросу. ВНИМАНИЕ: по прямой просьбе владельца эта смена сделана
-  # БЕЗ обращения к API — ни эндпоинт, ни точная форма параметра для
-  # голоса/тона НЕ подтверждены вживую (в отличие от предыдущего выбора,
-  # gemini-3.8-flash-tts, который был проверен реальным запросом до 402
-  # Insufficient balance). Ниже — только то, что можно определить из
-  # описания модели в каталоге routerai.ru/models (кэш, не новый запрос).
+  # владельца. Модель по умолчанию — bytedance-seed/seed-audio-1-0 (семейство
+  # Seed, как и фото seedream-4.5). Выбор модели/описания голоса сделан БЕЗ
+  # обращения к API (по прямой просьбе) — не то же самое, что "проверено
+  # вживую".
   default: bytedance-seed/seed-audio-1-0
   quality: minimax/speech-2.8-hd
-  # Из описания каталога: "Seed Audio 1.0 ... создаёт речь на основе
-  # текстового запроса на естественном языке, который может описывать
-  # желаемый голос, тон и звуковые эффекты, с возможностью использования
-  # идентификатора Seed speaker ID или эталонного аудиоклипа для клонирования
-  # голоса". Значит `voice` для этой модели, вероятно, принимает не короткий
-  # пресет-id (как "alloy"/"Leda" у OpenAI/Gemini), а свободное описание —
-  # НЕ ПОДТВЕРЖДЕНО без реального запроса. Ниже — такое описание, подобранное
-  # под персонажа (см. persona/bible.md после init-persona: 24 года, Сплит,
-  # уверенная, сухой юмор, тёплая к своим):
+  # ПОДТВЕРЖДЕНО вживую 27.09.2026 (реальный прогон через бота): эта модель
+  # принимает произвольный текст в поле `voice` (описание голоса/тона, не
+  # короткий пресет-id) — запрос дошёл до генерации, не отклонён по формату
+  # `voice`. НЕ путать с response_format: та же попытка вернула `503 ZodError
+  # ... invalid_value ... path: response_format ... expected "mp3"|"pcm"` —
+  # значит response_format="opus" эта модель не поддерживает вообще, только
+  # mp3/pcm (см. gen/voice.py — response_format="mp3" по умолчанию,
+  # gen/telegram_entry.py отправляет получившийся mp3 через sendAudio, не
+  # sendVoice, потому что настоящий кружок-голосовое Telegram требует
+  # ogg/opus, а перекодирования в этом инструменте нет).
   voice_name: >-
     Young confident woman in her mid-20s, warm and slightly playful tone with
     dry sense of humor, casual conversational pace, natural and unpolished
     (not corporate/announcer-like), light Croatian accent in English speech.
-  # Что проверить при первом реальном запросе (нужен баланс на аккаунте):
-  #   1. Принимает ли API вообще произвольный текст в поле `voice`, или
-  #      нужен отдельный параметр/формат (например, описание внутри `input`,
-  #      а `voice` — обязательный короткий speaker-id).
-  #   2. Если `voice` требует именно Seed speaker ID — придётся сначала
-  #      найти список готовых speaker ID в документации RouterAI/ByteDance
-  #      Seed (не просмотрено — недоступно без сети/запроса к каталогу
-  #      конкретной модели).
-  #   3. Качество на слух — тот же принцип, что и раньше: см.
-  #      `uv run voice-line --text "..." --voice "<альтернативное описание>"`
-  #      для A/B без правки этого файла.
+    Sounds like a real voice message recorded on the go — as if she's walking
+    somewhere or doing something with her hands while talking, not sitting
+    still in front of a microphone: natural breathing, slightly uneven pacing,
+    occasional background-life energy, not studio-clean narration.
+  # Ещё не проверено на слух — совпадает ли это описание с ожидаемым звучанием
+  # персонажа, может решить только прослушивание. Сравнение пресетов:
+  # `uv run voice-line --text "..." --voice "<альтернативное описание>"`.

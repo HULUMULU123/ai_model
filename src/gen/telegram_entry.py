@@ -10,14 +10,17 @@ https://core.telegram.org/bots/api#getupdates), процесс работает,
 Формат сообщения:
   - обычный текст → бриф на фото, `--aspect 9:16` (вертикаль под Reels/Stories)
   - `video: <бриф>` → бриф на видео (вертикаль 9:16 по умолчанию в адаптере)
-  - `voice: <текст>` (или `озвучь:`) → озвучка текста голосом персонажа
+  - `voice: <текст>` (или `озвучь:`) → озвучка текста голосом персонажа,
+    присылается аудиофайлом (`sendAudio`, mp3 — TTS-модель не отдаёт
+    ogg/opus, нужный для настоящего кружка-голосового `sendVoice`)
     (не входит в исходное ТЗ — добавлено отдельно, см. `src/gen/voice.py`)
   - `/start` или `/help` → инлайн-клавиатура с краткими подсказками по каждой
     команде (нажатие кнопки-подсказки не запускает генерацию — только
     показывает инструкцию); отдельная кнопка «🆕 Инициализировать персонажа»
     запускает `init-persona` по `persona/brief.md` (ровно 1 LLM-вызов + 2
-    генерации изображений, как и из CLI, см. ТЗ §5) — единственная кнопка,
-    которая реально что-то генерирует по нажатию
+    генерации изображений, как и из CLI, см. ТЗ §5) и присылает получившиеся
+    canon-референсы файлами в чат — единственная кнопка, которая реально
+    что-то генерирует по нажатию
 
 Пока `TELEGRAM_CHAT_ID` не задан в `.env`, бот ничего не генерирует — только
 печатает в консоль chat_id первого написавшего, чтобы владелец мог его
@@ -35,10 +38,10 @@ from gen.core.config import load_settings
 from gen.core.logging import get_logger
 from gen.delivery.telegram import (
     answer_callback_query,
+    send_audio,
     send_message,
     send_photo,
     send_video,
-    send_voice,
 )
 from gen.graph.generate.run import run_generate
 from gen.voice import run_voice_line
@@ -85,8 +88,8 @@ HELP_BUTTONS: list[tuple[str, str, str]] = [
         "🎙️ Голос",
         (
             "Напиши с префиксом voice: (или озвучь:), например:\n«voice: Crvena update, day "
-            "twelve. Still not starting.»\nПрисылаю голосовым сообщением, не входит в "
-            "исходное ТЗ — добавлено отдельно по запросу."
+            "twelve. Still not starting.»\nПрисылаю аудиофайлом (mp3), не входит в исходное "
+            "ТЗ — добавлено отдельно по запросу."
         ),
     ),
     (
@@ -150,12 +153,15 @@ def _handle_init_persona_action(*, bot_token: str, chat_id: str) -> None:
         send_message(f"Ошибка инициализации: {exc}", bot_token=bot_token, chat_id=chat_id)
         return
 
+    canon_images = result.get("canon_images", [])
     send_message(
         f"Готово: {PERSONA_DIR}/bible.md, persona.yaml, wardrobe.yaml, "
-        f"{len(result['canon_images'])} файлов в {PERSONA_DIR}/canon/.",
+        f"{len(canon_images)} файлов в {PERSONA_DIR}/canon/.",
         bot_token=bot_token,
         chat_id=chat_id,
     )
+    for image_path in canon_images:
+        send_photo(image_path, bot_token=bot_token, chat_id=chat_id, caption=image_path.name)
     if result.get("qc_warning"):
         send_message(f"QC предупреждение: {result['qc_warning']}", bot_token=bot_token, chat_id=chat_id)
 
@@ -187,11 +193,15 @@ def _handle_message(*, bot_token: str, chat_id: str, text: str) -> None:
 
     if format_ == "voice":
         try:
-            delivered_path = run_voice_line(scene_brief, response_format="opus")
+            # mp3 — seed-audio-1-0 отдаёт только mp3/pcm (подтверждено вживую:
+            # запрос с response_format="opus" отклонён 503 ZodError). sendVoice
+            # официально требует ogg/opus для кружка-голосового, mp3 туда не
+            # положить без перекодирования — поэтому шлём как обычный аудиофайл.
+            delivered_path = run_voice_line(scene_brief, response_format="mp3")
         except Exception as exc:  # noqa: BLE001 - показать причину владельцу, не падать молча
             send_message(f"Ошибка озвучки: {exc}", bot_token=bot_token, chat_id=chat_id)
             return
-        send_voice(delivered_path, bot_token=bot_token, chat_id=chat_id, caption=scene_brief)
+        send_audio(delivered_path, bot_token=bot_token, chat_id=chat_id, caption=scene_brief)
         return
 
     try:

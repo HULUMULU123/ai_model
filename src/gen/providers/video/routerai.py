@@ -18,14 +18,25 @@ Invalid JSON format`, то есть эндпоинт ждёт обычный JSO
     получить не удалось (не хватило баланса даже на самый дешёвый вариант:
     46.57 ₽ при использовании 65.79 ₽ за 480p/5с).
 
-**Не полностью подтверждено:** точная форма успешного ответа `GET
-/videos/{id}` (имя поля статуса, имя поля с URL/данными результата) — не
-проверена вживую из-за нехватки баланса. Реализация ниже — лучшее
-предположение по обычным конвенциям (`status`, `video_url`/`url`), но
-`_parse_status`/`_extract_video_url` кидают `ProviderError` с сырым JSON,
-если ожидаемых полей нет, вместо того чтобы тихо упасть на непонятном
-исключении. Поправить после первого реального успешного прогона (нужно
-пополнить баланс аккаунта).
+**Обновлено после реального прогона (баланс пополнен, запрос дошёл до
+создания job):** ответ `POST /videos` — не `{"id": ...}` напрямую, а
+`{"generation_id": "rai-vid-...", "id": "gen-vid-...", "polling_url":
+"https://routerai.ru/api/v1/videos/gen-vid-...", "status": "pending"}`.
+Значит: (1) статус `pending` — тоже "ещё не готово", не ошибка; (2) есть
+готовый `polling_url`, которым и нужно опрашивать вместо самостоятельной
+сборки `/videos/{id}` (используем его, если он есть в ответе). Финальная
+форма ответа при `status: "completed"` (имя поля с URL результата) всё ещё
+не подтверждена — до этого статуса реальный прогон пока не дошёл.
+
+**Модель по умолчанию сменена на `alibaba/wan-3.0` (было `wan-2.6`, по
+прямому запросу). НЕ ПОДТВЕРЖДЕНО реальным запросом** (в отличие от
+`size` для `wan-2.6`, который дошёл до 402 Insufficient balance). У
+`wan-3.0` в каталоге `supported_sizes: null`, а `supported_resolutions:
+["480p","720p","1080p"]` + `supported_aspect_ratios` (включая `9:16`) — то
+есть, в отличие от `wan-2.6`, готовых строк `WxH` нет, поэтому вместо
+единого поля `size` отправляются отдельные `resolution`+`aspect_ratio`.
+Если API этой модели на самом деле ждёт другие имена полей — вернётся
+ошибка API, а не тихая генерация с неверным разрешением.
 """
 
 from __future__ import annotations
@@ -44,12 +55,11 @@ from gen.providers.base import VideoProvider
 POLL_INTERVAL_SECONDS = 5.0
 POLL_TIMEOUT_SECONDS = 600.0
 
-# Модель по умолчанию (alibaba/wan-2.6, см. models.yaml) поддерживает
-# длительности 5 и 10 секунд — подтверждено ошибкой валидации API.
 DEFAULT_DURATION_SECONDS = 5
-# Вертикаль 9:16 по умолчанию — под Reels/Stories/TikTok-формат (720p, дешевле
-# 1080x1920); см. supported_sizes в docstring выше.
-DEFAULT_SIZE = "720x1280"
+# 720p/9:16 по умолчанию (вертикаль под Reels/Stories, разрешение — по
+# прямому запросу "пока 720"). См. models.yaml `video.resolution`/`aspect_ratio`.
+DEFAULT_RESOLUTION = "720p"
+DEFAULT_ASPECT_RATIO = "9:16"
 
 
 def _image_to_data_uri(path: Path) -> str:
@@ -66,7 +76,8 @@ class RouterAIVideoProvider(VideoProvider):
         api_key: str,
         base_url: str,
         model: str,
-        size: str = DEFAULT_SIZE,
+        resolution: str = DEFAULT_RESOLUTION,
+        aspect_ratio: str = DEFAULT_ASPECT_RATIO,
         duration_seconds: int = DEFAULT_DURATION_SECONDS,
         output_dir: Path | None = None,
     ) -> None:
@@ -75,7 +86,8 @@ class RouterAIVideoProvider(VideoProvider):
         self._base_url = base_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {api_key}"}
         self._model = model
-        self._size = size
+        self._resolution = resolution
+        self._aspect_ratio = aspect_ratio
         self._duration_seconds = duration_seconds
         self._output_dir = output_dir or Path(tempfile.mkdtemp(prefix="content-gen-videos-"))
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -94,7 +106,8 @@ class RouterAIVideoProvider(VideoProvider):
                     "model": self._model,
                     "prompt": prompt,
                     "image": _image_to_data_uri(source_image),
-                    "size": self._size,
+                    "resolution": self._resolution,
+                    "aspect_ratio": self._aspect_ratio,
                     "duration": self._duration_seconds,
                 },
                 timeout=60.0,
@@ -108,10 +121,11 @@ class RouterAIVideoProvider(VideoProvider):
             job_id = job.get("id")
             if not job_id:
                 raise ProviderError(f"RouterAI videos API: ответ без id: {job!r}")
+            polling_url = job.get("polling_url") or f"{self._base_url}/videos/{job_id}"
 
             deadline = time.monotonic() + POLL_TIMEOUT_SECONDS
             while True:
-                status_response = await client.get(f"/videos/{job_id}", timeout=30.0)
+                status_response = await client.get(polling_url, timeout=30.0)
                 if status_response.status_code >= 400:
                     raise ProviderError(
                         f"RouterAI videos API: ошибка при опросе статуса "
@@ -124,7 +138,7 @@ class RouterAIVideoProvider(VideoProvider):
                     break
                 if status == "failed":
                     raise ProviderError(f"Видео {job_id} завершилось с ошибкой: {job!r}")
-                if status not in ("queued", "in_progress", "processing", None):
+                if status not in ("queued", "pending", "in_progress", "processing", None):
                     raise ProviderError(
                         f"RouterAI videos API: неизвестный статус {status!r} в ответе {job!r}"
                     )

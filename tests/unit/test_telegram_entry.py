@@ -115,10 +115,13 @@ def test_handle_callback_query_init_persona_success(tmp_path, monkeypatch):
     monkeypatch.setattr(telegram_entry, "PERSONA_BRIEF_PATH", brief_path)
     monkeypatch.setattr(telegram_entry, "PERSONA_DIR", tmp_path / "persona")
 
+    canon_image = tmp_path / "canon-00.png"
+    canon_image.write_bytes(b"fake-canon-image")
+
     def fake_run_init_persona(*, brief, name, persona_dir):
         assert brief == "тестовый бриф"
         assert name == telegram_entry.PERSONA_NAME
-        return {"canon_images": [tmp_path / "canon-00.png"], "qc_warning": None}
+        return {"canon_images": [canon_image], "qc_warning": None}
 
     import gen.graph.init_persona.run as init_persona_run
 
@@ -128,6 +131,9 @@ def test_handle_callback_query_init_persona_success(tmp_path, monkeypatch):
         "https://api.telegram.org/bot123:abc/answerCallbackQuery"
     ).mock(return_value=httpx.Response(200, json={"ok": True, "result": True}))
     message_route = respx.post("https://api.telegram.org/bot123:abc/sendMessage").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+    photo_route = respx.post("https://api.telegram.org/bot123:abc/sendPhoto").mock(
         return_value=httpx.Response(200, json={"ok": True, "result": {}})
     )
 
@@ -140,6 +146,7 @@ def test_handle_callback_query_init_persona_success(tmp_path, monkeypatch):
 
     assert answer_route.called
     assert message_route.call_count >= 2  # "инициализирую..." + "готово"
+    assert photo_route.call_count == 1
 
 
 @respx.mock
