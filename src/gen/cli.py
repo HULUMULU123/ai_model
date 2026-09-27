@@ -5,6 +5,7 @@ generate: фото — граф реализован (M3); видео появи
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import click
@@ -87,17 +88,31 @@ def init_persona(brief: str | None, name: str | None, full_reference_set: bool, 
 )
 def generate(brief: str, format_: str, n: int, retries: int, quality: bool, aspect: str) -> None:
     """Сгенерировать фото или видео персонажа по брифу на кадр."""
-    from gen.graph.generate.run import run_generate
+    from gen.graph.generate.run import astream_generate
 
-    result = run_generate(
-        scene_brief=brief,
-        format_=format_,
-        n=n,
-        retries=retries,
-        quality=quality,
-        aspect=aspect,
-        persona_dir=DEFAULT_PERSONA_DIR,
-    )
+    if n != 1:
+        raise click.UsageError("--n > 1 (веер кандидатов) не входит в дефолтный режим M3")
+
+    async def _run() -> dict:
+        state: dict = {}
+        async for node_name, delta in astream_generate(
+            scene_brief=brief, format_=format_, retries=retries, quality=quality, aspect=aspect,
+            persona_dir=DEFAULT_PERSONA_DIR,
+        ):
+            state.update(delta)
+            if node_name == "build_prompt":
+                click.echo(f"Промпт:\n{delta['prompt']}")
+            elif node_name == "generate_one":
+                click.echo(f"Генерация {format_}, попытка {delta['attempts']}...")
+            elif node_name == "qc_one":
+                click.echo(f"QC score: {delta['qc_score']:.2f}")
+            elif node_name == "post_process":
+                click.echo("Пост-обработка...")
+            elif node_name == "compliance_check":
+                click.echo(f"Модерация: {'ок' if delta.get('compliance_passed') else 'нарушение'}")
+        return state
+
+    result = asyncio.run(_run())
 
     if not result.get("compliance_passed", False):
         click.echo(f"Отклонено модерацией: {result.get('compliance_reason') or 'причина не указана'}")

@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -173,3 +174,38 @@ def test_handle_callback_query_init_persona_missing_brief(tmp_path, monkeypatch)
     assert message_route.call_count == 1
     sent_body = json.loads(message_route.calls[0].request.content)
     assert "brief" in sent_body["text"].lower() or "не найден" in sent_body["text"].lower()
+
+
+@respx.mock
+def test_stream_generate_to_chat_forwards_intermediate_steps(tmp_path, monkeypatch):
+    from gen import telegram_entry
+
+    async def fake_astream_generate(*, scene_brief, format_, aspect):
+        delivered = tmp_path / "photo.png"
+        delivered.write_bytes(b"fake")
+        yield "build_prompt", {"prompt": "a detailed prompt", "attempts": 0}
+        yield "generate_one", {"attempts": 1, "candidate": tmp_path / "c.png"}
+        yield "qc_one", {"qc_score": 0.91, "best_score": 0.91}
+        yield "finalize_accepted", {"low_confidence": False}
+        yield "post_process", {}
+        yield "compliance_check", {"compliance_passed": True, "compliance_reason": None}
+        yield "deliver", {"delivered_path": delivered}
+
+    monkeypatch.setattr(telegram_entry, "astream_generate", fake_astream_generate)
+
+    message_route = respx.post("https://api.telegram.org/bot123:abc/sendMessage").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {}})
+    )
+
+    result = asyncio.run(
+        telegram_entry._stream_generate_to_chat(
+            bot_token="123:abc", chat_id="42", scene_brief="сцена", format_="photo"
+        )
+    )
+
+    assert result["delivered_path"].is_file()
+    sent_texts = [json.loads(c.request.content)["text"] for c in message_route.calls]
+    assert any("a detailed prompt" in t for t in sent_texts)
+    assert any("попытка 1" in t for t in sent_texts)
+    assert any("0.91" in t for t in sent_texts)
+    assert any("Модерация" in t for t in sent_texts)

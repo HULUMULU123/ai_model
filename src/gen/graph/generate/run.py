@@ -1,9 +1,10 @@
-"""Точка входа для запуска графа `generate` из CLI."""
+"""Точка входа для запуска графа `generate` из CLI и Telegram-бота."""
 
 from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 from gen.context.persona_context import PersonaContext
@@ -21,20 +22,9 @@ DEFAULT_PERSONA_DIR = Path("persona")
 DEFAULT_OUTPUT_ROOT = Path("output")
 
 
-async def _run_generate_async(
-    *,
-    scene_brief: str,
-    format_: str,
-    n: int,
-    retries: int,
-    quality: bool,
-    aspect: str,
-    persona_dir: Path,
-    output_root: Path,
-) -> GenerateState:
-    if n != 1:
-        raise NotImplementedError("--n > 1 (веер кандидатов) не входит в дефолтный режим M3")
-
+def _build_deps(
+    *, quality: bool, persona_dir: Path, output_root: Path
+) -> tuple[NodeDeps, PersonaContext]:
     persona_ctx = PersonaContext.load(persona_dir)
     settings = load_settings()
     models_config = load_models_config()
@@ -57,6 +47,24 @@ async def _run_generate_async(
         compliance_provider=NotImplementedComplianceProvider(),
         output_root=output_root,
     )
+    return deps, persona_ctx
+
+
+async def _run_generate_async(
+    *,
+    scene_brief: str,
+    format_: str,
+    n: int,
+    retries: int,
+    quality: bool,
+    aspect: str,
+    persona_dir: Path,
+    output_root: Path,
+) -> GenerateState:
+    if n != 1:
+        raise NotImplementedError("--n > 1 (веер кандидатов) не входит в дефолтный режим M3")
+
+    deps, persona_ctx = _build_deps(quality=quality, persona_dir=persona_dir, output_root=output_root)
 
     graph = build_generate_graph(deps, max_retries=retries)
     initial_state: GenerateState = {
@@ -93,3 +101,34 @@ def run_generate(
             output_root=output_root,
         )
     )
+
+
+async def astream_generate(
+    *,
+    scene_brief: str,
+    format_: str = "photo",
+    retries: int = 1,
+    quality: bool = False,
+    aspect: str = "4:5",
+    persona_dir: Path = DEFAULT_PERSONA_DIR,
+    output_root: Path = DEFAULT_OUTPUT_ROOT,
+) -> AsyncIterator[tuple[str, dict]]:
+    """Как `run_generate`, но отдаёт (имя_узла, апдейт_состояния) по мере
+    прохождения графа — чтобы вызывающий код (например, Telegram-бот) мог
+    показывать промежуточные шаги (промпт, попытка генерации, QC-score,
+    модерация), а не только финальный результат."""
+    deps, persona_ctx = _build_deps(quality=quality, persona_dir=persona_dir, output_root=output_root)
+
+    graph = build_generate_graph(deps, max_retries=retries)
+    initial_state: GenerateState = {
+        "scene_brief": scene_brief,
+        "format": format_,
+        "persona_ctx": persona_ctx,
+        "max_retries": retries,
+        "aspect": aspect,
+    }
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    async for step in graph.astream(initial_state, config=config, stream_mode="updates"):
+        for node_name, delta in step.items():
+            yield node_name, delta

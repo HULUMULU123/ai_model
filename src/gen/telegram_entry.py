@@ -1,8 +1,11 @@
 """Личный Telegram-бот "для себя" (вариант B из ТЗ §6).
 
-Пишешь боту бриф текстом → бот запускает граф `generate` → присылает готовый
-файл тебе в личку. Без карточек одобрения, без ролей, без вебхуков и БД —
-long polling через `getUpdates` (документированный Telegram Bot API:
+Пишешь боту бриф текстом → бот запускает граф `generate` и присылает КАЖДЫЙ
+промежуточный шаг в чат (промпт, попытка генерации, QC-score, пост-обработка,
+модерация), а не только готовый файл в конце — по прямому запросу владельца
+("все промежуточные состояния и генерации должны отправляться в чат"). Без
+карточек одобрения, без ролей, без вебхуков и БД — long polling через
+`getUpdates` (документированный Telegram Bot API:
 https://core.telegram.org/bots/api#getupdates), процесс работает, пока ты
 сам его не остановишь (это не фоновый воркер фермы — просто другая точка
 входа в тот же граф `generate`, что и CLI).
@@ -30,6 +33,7 @@ https://core.telegram.org/bots/api#getupdates), процесс работает,
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import httpx
@@ -43,7 +47,7 @@ from gen.delivery.telegram import (
     send_photo,
     send_video,
 )
-from gen.graph.generate.run import run_generate
+from gen.graph.generate.run import astream_generate
 from gen.voice import run_voice_line
 
 logger = get_logger(__name__)
@@ -205,7 +209,11 @@ def _handle_message(*, bot_token: str, chat_id: str, text: str) -> None:
         return
 
     try:
-        result = run_generate(scene_brief=scene_brief, format_=format_, aspect="9:16")
+        result = asyncio.run(
+            _stream_generate_to_chat(
+                bot_token=bot_token, chat_id=chat_id, scene_brief=scene_brief, format_=format_
+            )
+        )
     except Exception as exc:  # noqa: BLE001 - показать причину владельцу, не падать молча
         send_message(f"Ошибка генерации: {exc}", bot_token=bot_token, chat_id=chat_id)
         return
@@ -223,6 +231,37 @@ def _handle_message(*, bot_token: str, chat_id: str, text: str) -> None:
         send_video(result["delivered_path"], bot_token=bot_token, chat_id=chat_id, caption=caption)
     else:
         send_photo(result["delivered_path"], bot_token=bot_token, chat_id=chat_id, caption=caption)
+
+
+async def _stream_generate_to_chat(
+    *, bot_token: str, chat_id: str, scene_brief: str, format_: str
+) -> dict:
+    """Прогоняет граф `generate` через `astream_generate` и пересылает
+    промежуточные шаги (промпт, попытка, QC-score, пост-обработка,
+    модерация) в чат по мере выполнения — по прямому запросу владельца:
+    "все промежуточные состояния и генерации должны отправляться в чат".
+    Возвращает финальное состояние (собранное из дельт по узлам)."""
+    state: dict = {}
+    async for node_name, delta in astream_generate(scene_brief=scene_brief, format_=format_, aspect="9:16"):
+        state.update(delta)
+
+        if node_name == "build_prompt":
+            send_message(f"Промпт:\n{delta['prompt']}", bot_token=bot_token, chat_id=chat_id)
+        elif node_name == "generate_one":
+            send_message(
+                f"Генерация {format_}, попытка {delta['attempts']}...",
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+        elif node_name == "qc_one":
+            send_message(f"QC score: {delta['qc_score']:.2f}", bot_token=bot_token, chat_id=chat_id)
+        elif node_name == "post_process":
+            send_message("Пост-обработка...", bot_token=bot_token, chat_id=chat_id)
+        elif node_name == "compliance_check":
+            status = "ок" if delta.get("compliance_passed") else "нарушение"
+            send_message(f"Модерация: {status}", bot_token=bot_token, chat_id=chat_id)
+
+    return state
 
 
 def run_bot() -> None:
