@@ -6,10 +6,13 @@
 Invalid JSON format`, то есть эндпоинт ждёт обычный JSON, не multipart):
 
   - `POST /api/v1/videos` с JSON `{"model", "prompt", "image": "data:...",
-    "size": "480p"|"720p"|"1080p", "duration": <секунды>}` — подтверждено
-    структурированной ошибкой `402 Insufficient balance` с точной оценкой
-    стоимости (значит модель/поля приняты как валидные) при недостатке
-    средств на аккаунте.
+    "size": ..., "duration": <секунды>}` — подтверждено структурированной
+    ошибкой `402 Insufficient balance` с точной оценкой стоимости (значит
+    модель/поля приняты как валидные) при недостатке средств на аккаунте.
+    `size` — точный `WxH`, не тир качества: для `alibaba/wan-2.6` каталог
+    (`routerai.ru/models`) даёт `supported_sizes: ["1280x720", "1080x1920",
+    "720x1280", "1920x1080"]` и `supported_aspect_ratios: ["16:9", "9:16"]` —
+    вертикаль для Reels/Stories это `720x1280` (или `1080x1920` подороже).
   - `GET /api/v1/videos/{id}` — подтверждено только на несуществующем id
     (`404 {"error": "Video job not found"}`), реальный успешный job
     получить не удалось (не хватило баланса даже на самый дешёвый вариант:
@@ -44,7 +47,9 @@ POLL_TIMEOUT_SECONDS = 600.0
 # Модель по умолчанию (alibaba/wan-2.6, см. models.yaml) поддерживает
 # длительности 5 и 10 секунд — подтверждено ошибкой валидации API.
 DEFAULT_DURATION_SECONDS = 5
-DEFAULT_SIZE = "720p"
+# Вертикаль 9:16 по умолчанию — под Reels/Stories/TikTok-формат (720p, дешевле
+# 1080x1920); см. supported_sizes в docstring выше.
+DEFAULT_SIZE = "720x1280"
 
 
 def _image_to_data_uri(path: Path) -> str:
@@ -56,13 +61,22 @@ def _image_to_data_uri(path: Path) -> str:
 
 class RouterAIVideoProvider(VideoProvider):
     def __init__(
-        self, *, api_key: str, base_url: str, model: str, output_dir: Path | None = None
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        model: str,
+        size: str = DEFAULT_SIZE,
+        duration_seconds: int = DEFAULT_DURATION_SECONDS,
+        output_dir: Path | None = None,
     ) -> None:
         if not api_key:
             raise ProviderError("ROUTERAI_API_KEY не задан")
         self._base_url = base_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {api_key}"}
         self._model = model
+        self._size = size
+        self._duration_seconds = duration_seconds
         self._output_dir = output_dir or Path(tempfile.mkdtemp(prefix="content-gen-videos-"))
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -80,8 +94,8 @@ class RouterAIVideoProvider(VideoProvider):
                     "model": self._model,
                     "prompt": prompt,
                     "image": _image_to_data_uri(source_image),
-                    "size": DEFAULT_SIZE,
-                    "duration": DEFAULT_DURATION_SECONDS,
+                    "size": self._size,
+                    "duration": self._duration_seconds,
                 },
                 timeout=60.0,
             )
